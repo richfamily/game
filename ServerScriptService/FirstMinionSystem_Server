@@ -1,0 +1,314 @@
+--[[
+    FirstMinionSystem_Server.lua
+    Server-side script for handling first minion acquisition
+    TYPE: Normal Script (place in ServerScriptService)
+]]
+
+local ServerScriptService = game:GetService("ServerScriptService")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+
+-- Create necessary RemoteEvents folder first
+local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+if not remotes then
+    remotes = Instance.new("Folder")
+    remotes.Name = "Remotes"
+    remotes.Parent = ReplicatedStorage
+    print("Created Remotes folder")
+end
+
+-- Create essential RemoteEvents and Functions first
+local function createRemote(name, className)
+    local remote = remotes:FindFirstChild(name)
+    if not remote then
+        remote = Instance.new(className)
+        remote.Name = name
+        remote.Parent = remotes
+        print("Created " .. name .. " " .. className)
+    end
+    return remote
+end
+
+-- Create necessary RemoteEvents
+local getStarterMinionEvent = createRemote("GetStarterMinion", "RemoteEvent")
+local updateUIEvent = createRemote("UpdateUI", "RemoteEvent")
+local playerReadyEvent = createRemote("PlayerReady", "RemoteEvent")
+local getPlayerDataFunction = createRemote("GetPlayerData", "RemoteFunction")
+
+-- Wait to make sure everything is loaded
+wait(1)
+
+-- Import required modules (with error handling)
+local DataManager, MinionManager
+
+-- Try to require DataManager
+local success, result = pcall(function()
+    return require(ReplicatedStorage.Modules.DataManager)
+end)
+
+if success then
+    DataManager = result
+else
+    warn("Failed to require DataManager: " .. tostring(result))
+    
+    -- Create a minimal DataManager as fallback
+    DataManager = {
+        GetData = function(self, player)
+            local data = player:FindFirstChild("PlayerData")
+            if not data then
+                data = Instance.new("Folder")
+                data.Name = "PlayerData"
+                data.Parent = player
+            end
+            
+            return data
+        end,
+        
+        SaveData = function(self, player, data)
+            -- This is just a placeholder - in a real game, you'd save to DataStore
+            print("Saving data for player: " .. player.Name)
+            return true
+        end,
+        
+        LoadData = function(self, player)
+            -- This is just a placeholder - in a real game, you'd load from DataStore
+            local data = {
+                Minions = {},
+                Coins = 0,
+                Diamonds = 0,
+                Rubies = 0,
+                UnlockedZones = {1},
+                Stats = {
+                    EnemiesDefeated = 0,
+                    BossesDefeated = 0,
+                    TotalCoinsEarned = 0,
+                    HighestZoneReached = 1
+                }
+            }
+            return data
+        end
+    }
+    
+    print("Created fallback DataManager")
+end
+
+-- Try to require MinionManager
+success, result = pcall(function()
+    return require(ReplicatedStorage.Modules.MinionManager)
+end)
+
+if success then
+    MinionManager = result
+else
+    warn("Failed to require MinionManager: " .. tostring(result))
+    -- MinionManager should be created separately and placed in ReplicatedStorage.Modules
+    
+    -- Create a warning in the console
+    warn("Please create MinionManager.lua in ReplicatedStorage.Modules")
+    
+    -- For now, create a minimal MinionManager as fallback
+    MinionManager = {
+        GenerateUUID = function()
+            local template = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+            return string.gsub(template, '[xy]', function(c)
+                local v = (c == 'x') and math.random(0, 0xf) or math.random(8, 0xb)
+                return string.format('%x', v)
+            end)
+        end,
+        
+        SpawnMinion = function(self, minionData, player)
+            print("Attempting to spawn minion: " .. minionData.ID .. " for player: " .. player.Name)
+            
+            -- Try to use AvatarSpawner as fallback (from your original code)
+            local success = false
+            
+            -- Try to use AvatarSpawner if available
+            pcall(function()
+                local avatarSpawner = ServerScriptService.AvatarSpawner
+                if avatarSpawner and avatarSpawner.attemptSpawnAvatar then
+                    success = avatarSpawner.attemptSpawnAvatar(minionData, player)
+                end
+            end)
+            
+            if not success then
+                print("Created placeholder for minion (not actually spawned): " .. minionData.ID)
+            end
+            
+            -- Always return success for now
+            return true
+        end
+    }
+    
+    print("Created fallback MinionManager")
+end
+
+-- Define GetPlayerData function
+getPlayerDataFunction.OnServerInvoke = function(player)
+    return DataManager:GetData(player)
+end
+
+-- Handler for the GetStarterMinion event
+getStarterMinionEvent.OnServerEvent:Connect(function(player)
+    print("GetStarterMinion event received from: " .. player.Name)
+    
+    -- Get player data (with fallback)
+    local playerData
+    
+    if DataManager.GetData then
+        playerData = DataManager:GetData(player)
+    else
+        -- Fallback using player instance
+        playerData = player:FindFirstChild("PlayerData")
+        if not playerData then
+            playerData = {
+                Minions = {}
+            }
+        end
+    end
+    
+    -- Check if player data exists
+    if not playerData then 
+        warn("Player data not found for: " .. player.Name)
+        -- Create basic player data as fallback
+        playerData = {
+            Minions = {},
+            Coins = 0,
+            Diamonds = 0,
+            Rubies = 0,
+            UnlockedZones = {1},
+            Stats = {
+                EnemiesDefeated = 0,
+                BossesDefeated = 0,
+                TotalCoinsEarned = 0,
+                HighestZoneReached = 1
+            }
+        }
+    end
+    
+    -- Check if the player already has minions
+    if playerData.Minions and #playerData.Minions > 0 then
+        -- Player already has minions, send error
+        updateUIEvent:FireClient(player, {
+            Type = "StarterMinionError",
+            ErrorMessage = "You already have minions!",
+            PlayerData = playerData
+        })
+        return
+    end
+    
+    -- Initialize minions array if it doesn't exist
+    if not playerData.Minions then
+        playerData.Minions = {}
+    end
+    
+    -- Generate UUID (with fallback)
+    local uuid
+    if MinionManager.GenerateUUID then
+        uuid = MinionManager:GenerateUUID()
+    else
+        -- Simple UUID fallback
+        uuid = "MINION-" .. tostring(math.random(10000,99999))
+    end
+    
+    -- Create starter minion
+    local starterMinion = {
+        ID = "MINION_BASIC",
+        UUID = uuid,
+        Level = 1,
+        XP = 0,
+        Equipped = true,
+        Variant = "Normal",
+        Rarity = "Common",
+        EquippedGear = nil,
+        EquippedAura = nil,
+        Stats = {
+            Damage = 5,
+            Speed = 10,
+            CoinsMultiplier = 1.0
+        }
+    }
+    
+    -- Add the minion to the player's data
+    table.insert(playerData.Minions, starterMinion)
+    
+    -- Save the player's data
+    if DataManager.SaveData then
+        DataManager:SaveData(player, playerData)
+    end
+    
+    print("Created starter minion for: " .. player.Name)
+    
+    -- Spawn the minion in the world
+    if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+        -- Attempt to spawn the minion
+        local success
+        
+        if MinionManager.SpawnMinion then
+            success = MinionManager:SpawnMinion(starterMinion, player)
+        else
+            -- Fallback using AvatarSpawner if available
+            pcall(function()
+                local avatarSpawner = ServerScriptService.AvatarSpawner
+                if avatarSpawner and avatarSpawner.attemptSpawnAvatar then
+                    success = avatarSpawner.attemptSpawnAvatar(starterMinion, player)
+                end
+            end)
+        end
+        
+        if not success then
+            warn("Failed to spawn starter minion for player: " .. player.Name)
+        end
+    end
+    
+    -- Notify the client
+    updateUIEvent:FireClient(player, {
+        Type = "StarterMinionReceived",
+        Minion = starterMinion,
+        PlayerData = playerData
+    })
+    
+    print("Sent StarterMinionReceived event to: " .. player.Name)
+end)
+
+-- When player joins
+Players.PlayerAdded:Connect(function(player)
+    -- Wait for player to fully load
+    wait(2)
+    
+    -- Load player data
+    local playerData
+    
+    if DataManager.LoadData then
+        playerData = DataManager:LoadData(player)
+    else
+        -- Fallback player data
+        playerData = {
+            Minions = {},
+            Coins = 0,
+            Diamonds = 0,
+            Rubies = 0,
+            UnlockedZones = {1},
+            Stats = {
+                EnemiesDefeated = 0,
+                BossesDefeated = 0,
+                TotalCoinsEarned = 0,
+                HighestZoneReached = 1
+            }
+        }
+    end
+    
+    if not playerData then 
+        warn("Failed to load data for player: " .. player.Name)
+        return
+    end
+    
+    -- Send the PlayerReady event
+    -- This will trigger the client to show the first minion UI if needed
+    playerReadyEvent:FireClient(player, {
+        PlayerData = playerData
+    })
+    
+    print("Sent PlayerReady event to: " .. player.Name)
+end)
+
+print("FirstMinionSystem server script initialized")
