@@ -1,6 +1,6 @@
 --[[
     MinionManager.lua
-    Basic implementation of MinionManager module
+    Fixed version that works with your existing MINION_BASIC_MODEL
     TYPE: ModuleScript (place in ReplicatedStorage.Modules)
 ]]
 
@@ -13,311 +13,335 @@ MinionManager.__index = MinionManager
 
 -- Create a new MinionManager instance
 function MinionManager.new()
-    local self = setmetatable({}, MinionManager)
-    
-    -- Initialize properties
-    self.ActiveMinions = {} -- Table to track active minions in the game
-    
-    return self
+	local self = setmetatable({}, MinionManager)
+
+	-- Initialize properties
+	self.ActiveMinions = {} -- Table to track active minions in the game
+
+	return self
 end
 
 -- Generate a unique UUID for minions
 function MinionManager:GenerateUUID()
-    local template = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
-    return string.gsub(template, '[xy]', function(c)
-        local v = (c == 'x') and math.random(0, 0xf) or math.random(8, 0xb)
-        return string.format('%x', v)
-    end)
+	local template = 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'
+	return string.gsub(template, '[xy]', function(c)
+		local v = (c == 'x') and math.random(0, 0xf) or math.random(8, 0xb)
+		return string.format('%x', v)
+	end)
 end
 
 -- Spawn a minion in the world
 function MinionManager:SpawnMinion(minionData, player)
-    -- Get the minion model
-    local minionModel = self:GetMinionModel(minionData.ID, minionData.Variant)
-    if not minionModel then
-        warn("Failed to find model for minion: " .. minionData.ID)
-        return false
-    end
-    
-    -- Clone the model
-    local minion = minionModel:Clone()
-    minion.Name = "Minion_" .. minionData.UUID
-    
-    -- Set up the minion properties
-    self:SetupMinion(minion, minionData, player)
-    
-    -- Add to active minions
-    self.ActiveMinions[minionData.UUID] = {
-        Model = minion,
-        Data = minionData,
-        Player = player
-    }
-    
-    print("Spawned minion: " .. minionData.ID .. " for player: " .. player.Name)
-    return true
+	print("Attempting to spawn minion: " .. minionData.ID .. " for player: " .. player.Name)
+
+	-- Get the minion model
+	local minionModel = self:GetMinionModel(minionData.ID, minionData.Variant)
+	if not minionModel then
+		warn("Failed to find model for minion: " .. minionData.ID)
+		return self:CreateEmergencyMinion(minionData, player)
+	end
+
+	-- Clone the model
+	local minion = minionModel:Clone()
+	minion.Name = "Minion_" .. minionData.UUID
+
+	-- Set up the minion properties
+	self:SetupMinion(minion, minionData, player)
+
+	-- Add to active minions
+	self.ActiveMinions[minionData.UUID] = {
+		Model = minion,
+		Data = minionData,
+		Player = player
+	}
+
+	print("Spawned minion: " .. minionData.ID .. " for player: " .. player.Name)
+	return true
 end
 
 -- Get a minion model from ReplicatedStorage
 function MinionManager:GetMinionModel(minionID, variant)
-    -- Default to Normal variant if not specified
-    variant = variant or "Normal"
-    
-    -- Build the model name based on ID and variant
-    local modelName = minionID .. "_MODEL"
-    if variant == "Golden" then
-        modelName = minionID .. "_GOLDEN_MODEL"
-    end
-    
-    -- Try to find the model in Assets/Minions
-    local minionsFolder = ReplicatedStorage:FindFirstChild("Assets")
-    if minionsFolder then
-        minionsFolder = minionsFolder:FindFirstChild("Minions")
-        if minionsFolder then
-            local model = minionsFolder:FindFirstChild(modelName)
-            if model then
-                return model
-            end
-        end
-    end
-    
-    -- As a fallback, look anywhere in ReplicatedStorage
-    local model = ReplicatedStorage:FindFirstChild(modelName, true)
-    if model then
-        return model
-    end
-    
-    -- If we still can't find it, try to use AvatarManager (for backward compatibility)
-    pcall(function()
-        local AvatarManager = require(ReplicatedStorage.Modules.AvatarManager)
-        if AvatarManager then
-            -- Try to get the model using AvatarManager's methods
-            local model = AvatarManager:GetAvatarModel(minionID, variant)
-            if model then
-                return model
-            end
-        end
-    end)
-    
-    -- If all else fails, create a simple placeholder model
-    return self:CreatePlaceholderModel(minionID)
-end
+	-- Default to Normal variant if not specified
+	variant = variant or "Normal"
 
--- Create a placeholder model if the actual model isn't found
-function MinionManager:CreatePlaceholderModel(minionID)
-    print("Creating placeholder model for: " .. minionID)
-    
-    -- Create a simple model
-    local model = Instance.new("Model")
-    model.Name = minionID .. "_MODEL"
-    
-    -- Create the main body
-    local torso = Instance.new("Part")
-    torso.Name = "Torso"
-    torso.Size = Vector3.new(2, 2, 1) * 0.5 -- Scaled down
-    torso.BrickColor = BrickColor.new("Bright blue")
-    torso.TopSurface = Enum.SurfaceType.Smooth
-    torso.BottomSurface = Enum.SurfaceType.Smooth
-    torso.Anchored = true
-    torso.CanCollide = false
-    torso.Parent = model
-    
-    -- Create the head
-    local head = Instance.new("Part")
-    head.Name = "Head"
-    head.Size = Vector3.new(1.2, 1.2, 1.2) * 0.5 -- Scaled down
-    head.BrickColor = BrickColor.new("Bright yellow")
-    head.TopSurface = Enum.SurfaceType.Smooth
-    head.BottomSurface = Enum.SurfaceType.Smooth
-    head.Shape = Enum.PartType.Ball
-    head.Anchored = true
-    head.CanCollide = false
-    head.CFrame = torso.CFrame * CFrame.new(0, 1.5 * 0.5, 0) -- Position above torso, scaled
-    head.Parent = model
-    
-    -- Add a humanoid
-    local humanoid = Instance.new("Humanoid")
-    humanoid.Name = "Humanoid"
-    humanoid.Parent = model
-    
-    -- Add FollowAttachment
-    local attachment = Instance.new("Attachment")
-    attachment.Name = "FollowAttachment"
-    attachment.Parent = torso
-    
-    -- Set the primary part
-    model.PrimaryPart = torso
-    
-    return model
+	-- First, check in the standard path: ReplicatedStorage.Assets.Minions.Normal
+	local assets = ReplicatedStorage:FindFirstChild("Assets")
+	if assets then
+		local minions = assets:FindFirstChild("Minions")
+		if minions then
+			local variantFolder = minions:FindFirstChild(variant)
+			if variantFolder then
+				local modelName = minionID .. "_MODEL"
+				local model = variantFolder:FindFirstChild(modelName)
+				if model then
+					return model
+				end
+			end
+		end
+	end
+
+	-- Second, search directly in ReplicatedStorage
+	local directModel = ReplicatedStorage:FindFirstChild(minionID .. "_MODEL")
+	if directModel then
+		return directModel
+	end
+
+	-- As a fallback, look anywhere in ReplicatedStorage with FindFirstChild
+	local model = ReplicatedStorage:FindFirstChild(minionID .. "_MODEL", true)
+	if model then
+		return model
+	end
+
+	-- If we still can't find it, create a simple placeholder model
+	return self:CreateEmergencyMinion(minionData, player)
 end
 
 -- Setup a minion instance with the proper properties
 function MinionManager:SetupMinion(minion, minionData, player)
-    -- Get the player's character
-    local character = player.Character
-    if not character then return end
-    
-    -- Position the minion near the player
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    if rootPart then
-        -- Position a bit behind and to the side of the player
-        local offset = CFrame.new(math.random(-3, 3), 0, math.random(-2, -5))
-        minion:SetPrimaryPartCFrame(rootPart.CFrame * offset)
-    end
-    
-    -- Parent the minion to the workspace
-    minion.Parent = workspace
-    
-    -- Make minion not collide with other minions or players
-    for _, part in ipairs(minion:GetDescendants()) do
-        if part:IsA("BasePart") then
-            part.CanCollide = false
-            
-            -- Set network ownership to the server for better performance
-            part:SetNetworkOwner(nil)
-        end
-    end
-    
-    -- Set up follow behavior
-    self:SetupFollowBehavior(minion, player)
+	-- Get the player's character
+	local character = player.Character
+	if not character then return end
+
+	-- Find appropriate parts
+	local primaryPart = minion.PrimaryPart
+	if not primaryPart then
+		-- Try to find a part to use as primary part
+		for _, part in pairs(minion:GetDescendants()) do
+			if part:IsA("BasePart") then
+				primaryPart = part
+				minion.PrimaryPart = part
+				break
+			end
+		end
+	end
+
+	if not primaryPart then
+		warn("No primary part found for minion. Creating a new part.")
+		local newPart = Instance.new("Part")
+		newPart.Name = "MinionBody"
+		newPart.Size = Vector3.new(1, 1, 1)
+		newPart.Transparency = 1 -- Invisible part since it's just for following
+		newPart.CanCollide = false
+		newPart.Anchored = false
+		newPart.Parent = minion
+		primaryPart = newPart
+		minion.PrimaryPart = newPart
+	end
+
+	-- Position the minion near the player
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if rootPart then
+		-- Position a bit behind the player
+		local offset = CFrame.new(0, 0, -5)
+		minion:SetPrimaryPartCFrame(rootPart.CFrame * offset)
+	end
+
+	-- Create folders for organization
+	local minionsFolder = workspace:FindFirstChild("Minions")
+	if not minionsFolder then
+		minionsFolder = Instance.new("Folder")
+		minionsFolder.Name = "Minions"
+		minionsFolder.Parent = workspace
+	end
+
+	local playerMinionsFolder = minionsFolder:FindFirstChild(player.Name)
+	if not playerMinionsFolder then
+		playerMinionsFolder = Instance.new("Folder")
+		playerMinionsFolder.Name = player.Name
+		playerMinionsFolder.Parent = minionsFolder
+	end
+
+	minion.Parent = playerMinionsFolder
+
+	-- Make minion not collide with other minions or players
+	for _, part in ipairs(minion:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.CanCollide = false
+			part.Anchored = false
+		end
+	end
+
+	-- Add nametag if it doesn't exist
+	if not minion:FindFirstChild("NameTag") and primaryPart then
+		local billboardGui = Instance.new("BillboardGui")
+		billboardGui.Name = "NameTag"
+		billboardGui.Size = UDim2.new(0, 100, 0, 40)
+		billboardGui.StudsOffset = Vector3.new(0, 2, 0)
+		billboardGui.Adornee = primaryPart
+		billboardGui.Parent = minion
+
+		local nameLabel = Instance.new("TextLabel")
+		nameLabel.Name = "NameLabel"
+		nameLabel.Size = UDim2.new(1, 0, 1, 0)
+		nameLabel.BackgroundTransparency = 1
+		nameLabel.TextColor3 = Color3.new(1, 1, 1)
+		nameLabel.TextStrokeTransparency = 0
+		nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+		nameLabel.Font = Enum.Font.GothamBold
+		nameLabel.TextSize = 14
+		nameLabel.Text = "Basic Minion"
+		nameLabel.Parent = billboardGui
+	end
+
+	-- Set up follow behavior with WeldConstraint for simplicity and reliability
+	self:SetupFollowBehavior(minion, player)
 end
 
--- Set up the follow behavior for a minion
+-- Set up reliable follow behavior
 function MinionManager:SetupFollowBehavior(minion, player)
-    -- Create a folder to store the follow logic if needed
-    local followScripts = minion:FindFirstChild("FollowScripts")
-    if not followScripts then
-        followScripts = Instance.new("Folder")
-        followScripts.Name = "FollowScripts"
-        followScripts.Parent = minion
-    end
-    
-    -- Create a script to handle following
-    local followScript = Instance.new("Script")
-    followScript.Name = "FollowBehavior"
-    
-    -- The follow script's source
-    followScript.Source = [[
-        local RunService = game:GetService("RunService")
-        local Players = game:GetService("Players")
-        
-        local minion = script.Parent.Parent
-        local player = Players:GetPlayerByUserId(]] .. player.UserId .. [[)
-        
-        local FOLLOW_DISTANCE = 5 -- How far from the player the minion should be
-        local SPEED_MULTIPLIER = 1.5 -- How fast the minion moves relative to distance
-        local MIN_DISTANCE = 2 -- Minimum distance from player
-        local MAX_DISTANCE = 20 -- Maximum distance before teleporting
-        
-        -- Get the primary part and humanoid
-        local primaryPart = minion.PrimaryPart
-        local humanoid = minion:FindFirstChildOfClass("Humanoid")
-        
-        if not primaryPart or not humanoid then
-            warn("Minion missing primary part or humanoid")
-            return
-        end
-        
-        -- Function to find the best follow point
-        local function getFollowPosition(character)
-            -- If character doesn't exist, return current position
-            if not character then return primaryPart.Position end
-            
-            -- Get the character's root part
-            local root = character:FindFirstChild("HumanoidRootPart")
-            if not root then return primaryPart.Position end
-            
-            -- Calculate the follow position
-            local direction = (primaryPart.Position - root.Position).Unit
-            direction = Vector3.new(direction.X, 0, direction.Z).Unit -- Remove Y component
-            
-            return root.Position + direction * FOLLOW_DISTANCE
-        end
-        
-        -- Connect to Heartbeat for smooth following
-        RunService.Heartbeat:Connect(function(dt)
-            if not player or not player.Character then return end
-            
-            local root = player.Character:FindFirstChild("HumanoidRootPart")
-            if not root then return end
-            
-            -- Calculate distance to player
-            local distance = (root.Position - primaryPart.Position).Magnitude
-            
-            -- If too far, teleport closer
-            if distance > MAX_DISTANCE then
-                -- Get a position near the player but not too close
-                local teleportPos = getFollowPosition(player.Character)
-                primaryPart.CFrame = CFrame.new(teleportPos)
-                return
-            end
-            
-            -- If far enough away, move toward player
-            if distance > MIN_DISTANCE then
-                -- Get the position to move toward
-                local targetPos = getFollowPosition(player.Character)
-                
-                -- Calculate move speed based on distance
-                local moveSpeed = math.min(15, distance * SPEED_MULTIPLIER)
-                humanoid.WalkSpeed = moveSpeed
-                
-                -- Move toward the target position
-                humanoid:MoveTo(targetPos)
-            else
-                -- Close enough, stop moving
-                humanoid:MoveTo(primaryPart.Position)
-            end
-        end)
-        
-        print("Minion follow behavior initialized for player: ]] .. player.Name .. [[")
-    ]]
-    
-    followScript.Parent = followScripts
+	local character = player.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+
+	local rootPart = character.HumanoidRootPart
+	local primaryPart = minion.PrimaryPart
+
+	if not primaryPart then
+		warn("Cannot setup follow behavior - minion has no primary part")
+		return
+	end
+
+	-- First remove any existing constraints
+	for _, child in pairs(minion:GetChildren()) do
+		if child:IsA("WeldConstraint") or child:IsA("AlignPosition") then
+			child:Destroy()
+		end
+	end
+
+	-- Create the weld constraint
+	local weld = Instance.new("WeldConstraint")
+	weld.Name = "FollowWeld"
+	weld.Part0 = rootPart
+	weld.Part1 = primaryPart
+	weld.Parent = minion
+
+	-- Position the minion behind the player
+	minion:SetPrimaryPartCFrame(rootPart.CFrame * CFrame.new(0, 0, -5))
+
+	print("Set up follow behavior for minion: " .. minion.Name)
+end
+
+-- Create emergency minion when nothing else works
+function MinionManager:CreateEmergencyMinion(minionData, player)
+	print("Creating emergency minion for player: " .. player.Name)
+
+	local character = player.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then
+		warn("Player character not found for emergency minion creation")
+		return false
+	end
+
+	-- Create a model
+	local model = Instance.new("Model")
+	model.Name = "EmergencyMinion_" .. minionData.UUID
+
+	-- Create the body part
+	local body = Instance.new("Part")
+	body.Name = "Body"
+	body.Shape = Enum.PartType.Ball
+	body.Size = Vector3.new(2, 2, 2) * 0.5
+	body.BrickColor = BrickColor.new("Bright blue")
+	body.Material = Enum.Material.Neon
+	body.CanCollide = false
+	body.Anchored = false
+	body.Parent = model
+
+	model.PrimaryPart = body
+
+	-- Create a billboard GUI for the name
+	local billboardGui = Instance.new("BillboardGui")
+	billboardGui.Name = "NameTag"
+	billboardGui.Size = UDim2.new(0, 100, 0, 40)
+	billboardGui.StudsOffset = Vector3.new(0, 1, 0)
+	billboardGui.Adornee = body
+	billboardGui.Parent = body
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "NameLabel"
+	nameLabel.Size = UDim2.new(1, 0, 1, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.TextColor3 = Color3.new(1, 1, 1)
+	nameLabel.TextStrokeTransparency = 0
+	nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
+	nameLabel.Font = Enum.Font.GothamBold
+	nameLabel.TextSize = 14
+	nameLabel.Text = "Basic Minion"
+	nameLabel.Parent = billboardGui
+
+	-- Create folder structure if needed
+	local minionsFolder = workspace:FindFirstChild("Minions")
+	if not minionsFolder then
+		minionsFolder = Instance.new("Folder")
+		minionsFolder.Name = "Minions"
+		minionsFolder.Parent = workspace
+	end
+
+	local playerMinionsFolder = minionsFolder:FindFirstChild(player.Name)
+	if not playerMinionsFolder then
+		playerMinionsFolder = Instance.new("Folder")
+		playerMinionsFolder.Name = player.Name
+		playerMinionsFolder.Parent = minionsFolder
+	end
+
+	-- Positioning
+	local rootPart = character.HumanoidRootPart
+	body.CFrame = rootPart.CFrame * CFrame.new(0, 0, -5)
+
+	model.Parent = playerMinionsFolder
+
+	-- Create a weld constraint
+	local weld = Instance.new("WeldConstraint")
+	weld.Name = "FollowWeld"
+	weld.Part0 = rootPart
+	weld.Part1 = body
+	weld.Parent = model
+
+	-- Track it in active minions
+	self.ActiveMinions[minionData.UUID] = {
+		Model = model,
+		Data = minionData,
+		Player = player
+	}
+
+	print("Created emergency minion for player: " .. player.Name)
+	return true
 end
 
 -- Despawn a minion by UUID
 function MinionManager:DespawnMinion(minionUUID)
-    local minionData = self.ActiveMinions[minionUUID]
-    if not minionData then
-        warn("Minion not found with UUID: " .. minionUUID)
-        return false
-    end
-    
-    -- Destroy the model
-    if minionData.Model then
-        minionData.Model:Destroy()
-    end
-    
-    -- Remove from active minions
-    self.ActiveMinions[minionUUID] = nil
-    
-    return true
+	local minionData = self.ActiveMinions[minionUUID]
+	if not minionData then
+		warn("Minion not found with UUID: " .. minionUUID)
+		return false
+	end
+
+	-- Destroy the model
+	if minionData.Model then
+		minionData.Model:Destroy()
+	end
+
+	-- Remove from active minions
+	self.ActiveMinions[minionUUID] = nil
+
+	return true
 end
 
 -- Despawn all minions for a player
 function MinionManager:DespawnPlayerMinions(player)
-    local minionsToRemove = {}
-    
-    -- Find all minions belonging to the player
-    for uuid, minionData in pairs(self.ActiveMinions) do
-        if minionData.Player == player then
-            table.insert(minionsToRemove, uuid)
-        end
-    end
-    
-    -- Despawn each minion
-    for _, uuid in ipairs(minionsToRemove) do
-        self:DespawnMinion(uuid)
-    end
-    
-    return #minionsToRemove > 0
+	local minionsToRemove = {}
+
+	-- Find all minions belonging to the player
+	for uuid, minionData in pairs(self.ActiveMinions) do
+		if minionData.Player == player then
+			table.insert(minionsToRemove, uuid)
+		end
+	end
+
+	-- Despawn each minion
+	for _, uuid in ipairs(minionsToRemove) do
+		self:DespawnMinion(uuid)
+	end
+
+	return #minionsToRemove > 0
 end
 
--- Update minion positions based on player position
-function MinionManager:UpdateMinions()
-    for uuid, minionData in pairs(self.ActiveMinions) do
-        -- The actual updating is now handled by the individual follow scripts
-    end
-end
-
--- Return the module
-return MinionManager.new() -- Return an instance, not the class
+return MinionManager.new() -- Return an instance instead of the class
