@@ -11,6 +11,30 @@ local RunService = game:GetService("RunService")
 local MinionManager = {}
 MinionManager.__index = MinionManager
 
+local fantastyMinionNames = {
+	"Banana", "Giggles", "Wacky", "Mellow", "Silly", "Cheeky", "Jolly", "Nutty", "Zany", "Kooky",
+	"Bumbling", "Snicker", "Twinkle", "Dizzy", "Sparkle", "Bumblebee", "Frolic", "Puddle", "Puffy", "Cranky",
+	"Loopy", "Bouncy", "Smiley", "Snazzy", "Chuckle", "Fluffy", "Muppet", "Giggly", "Tinker", "Jumpy",
+	"Snappy", "Cackle", "Pogo", "Muffin", "Sizzle", "Popper", "Quirky", "Doodle", "Mambo", "Rumble",
+	"Chortle", "Panting", "Razzle", "Twirly", "Hopper", "Dazzle", "Bongo", "Whirly", "Sprout", "Chirpy",
+	"Buzz", "Jelly", "Pepper", "Turbo", "Fuzzy", "Goober", "Noodle", "Pippin", "Wiggle", "Dandy",
+	"Tuner", "Bounce", "Widget", "Whimsy", "Dynamo", "Ticker", "Vortex", "Gizmo", "Atlas", "Pixel",
+	"Comet", "Quark", "Nitro", "Gadget", "Bolt", "Forge", "Spark", "Echo", "Nimbus", "Cosmos",
+	"Orbit", "Prism", "Fusion", "Vertex", "Zenith", "Ripple", "Glimmer", "Fumble", "Tumble", "Plinko",
+	"Jumble", "Frizzle", "Flip", "Flapjack", "Sprocket", "Knuckle", "Munchkin", "Pickle", "Cupcake", "Meatball",
+	"Popcorn", "Brownie", "Donut", "Pancake", "Waffle", "Biscuit", "Cookie", "Crumble", "Sprinkle", "Jingle",
+	"Cog", "Chimp", "Monkey", "Panda", "Rhino", "Koala", "Flamingo", "Hedgehog", "Otter", "Platypus",
+	"Seahorse", "Walrus", "Beetle", "Wombat", "Ocelot", "Alpaca", "Llama", "Meerkat", "Ferret", "Gerbil",
+	"Hamster", "Rabbit", "Squirrel", "Chipmunk", "Beaver", "Porcupine", "Mongoose", "Pangolin", "Sloth", "Lemur",
+	"Baboon", "Gibbon", "Bonobo", "Tarsier", "Macaw", "Pelican", "Toucan", "Puffin", "Starfish", "Squid",
+	"Lobster", "Crab", "Shrimp", "Octopus", "Jellyfish", "Marlin", "Piranha", "Trout", "Salmon", "Tuna",
+	"Anchovy", "Mussel", "Clam", "Oyster", "Scallop", "Ray", "Stingray", "Swordfish", "Dolphin", "Orca",
+	"Manatee", "Narwhal", "Beluga", "Gator", "Raptor", "Kiwi", "Mango", "Papaya", "Avocado", "Coconut",
+	"Cherry", "Grape", "Orange", "Lemon", "Lime", "Berry", "Melon", "Apricot", "Peach", "Plum",
+	"Strawberry", "Blueberry", "Raspberry", "Blackberry", "Cranberry", "Currant", "Pomegranate", "Tangerine", 
+	"Grapefruit", "Date"
+}
+
 -- Create a new MinionManager instance
 function MinionManager.new()
 	local self = setmetatable({}, MinionManager)
@@ -41,9 +65,14 @@ function MinionManager:SpawnMinion(minionData, player)
 		return self:CreateEmergencyMinion(minionData, player)
 	end
 
+	-- Create Random Name
+	local function getRandomMinionName()
+		return fantastyMinionNames[math.random(1, #fantastyMinionNames)]
+	end
+
 	-- Clone the model
 	local minion = minionModel:Clone()
-	minion.Name = "Minion_" .. minionData.UUID
+	minion.Name = getRandomMinionName()
 
 	-- Set up the minion properties
 	self:SetupMinion(minion, minionData, player)
@@ -179,7 +208,7 @@ function MinionManager:SetupMinion(minion, minionData, player)
 		nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
 		nameLabel.Font = Enum.Font.GothamBold
 		nameLabel.TextSize = 14
-		nameLabel.Text = "Basic Minion"
+		nameLabel.Text = ""
 		nameLabel.Parent = billboardGui
 	end
 
@@ -207,15 +236,55 @@ function MinionManager:SetupFollowBehavior(minion, player)
 		end
 	end
 
-	-- Create the weld constraint
-	local weld = Instance.new("WeldConstraint")
-	weld.Name = "FollowWeld"
-	weld.Part0 = rootPart
-	weld.Part1 = primaryPart
-	weld.Parent = minion
-
 	-- Position the minion behind the player
 	minion:SetPrimaryPartCFrame(rootPart.CFrame * CFrame.new(0, 0, -5))
+
+	-- Add a BodyPosition to provide smooth following
+	local bodyPosition = Instance.new("BodyPosition")
+	bodyPosition.Name = "FollowPosition"
+	bodyPosition.MaxForce = Vector3.new(10000, 10000, 10000)
+	bodyPosition.Position = rootPart.Position + Vector3.new(0, 0, -5)
+	bodyPosition.D = 100 -- Damping to make movement smoother
+	bodyPosition.P = 1000 -- Power/stiffness of the constraint
+	bodyPosition.Parent = primaryPart
+
+	-- Make the minion face the same direction as the player
+	local bodyGyro = Instance.new("BodyGyro")
+	bodyGyro.Name = "FacingGyro"
+	bodyGyro.MaxTorque = Vector3.new(0, 10000, 0) -- Only rotate on Y axis
+	bodyGyro.D = 100
+	bodyGyro.P = 1000
+	bodyGyro.CFrame = rootPart.CFrame
+	bodyGyro.Parent = primaryPart
+
+	-- Set up a connection to update the body position target
+	local connection = RunService.Heartbeat:Connect(function()
+		if not minion or not minion.Parent or not player.Character or not player.Character:FindFirstChild("HumanoidRootPart") then
+			connection:Disconnect()
+			return
+		end
+
+		-- Update the target position to be 5 studs behind the player
+		local targetPosition = player.Character.HumanoidRootPart.Position + (player.Character.HumanoidRootPart.CFrame.LookVector * -5)
+		bodyPosition.Position = targetPosition
+
+		-- Update the facing direction
+		bodyGyro.CFrame = CFrame.new(primaryPart.Position, Vector3.new(
+			player.Character.HumanoidRootPart.Position.X,
+			primaryPart.Position.Y,
+			player.Character.HumanoidRootPart.Position.Z
+			))
+	end)
+
+	-- Store the connection on the minion for cleanup
+	minion:SetAttribute("FollowConnection", tostring(connection))
+
+	-- Ensure all parts of the minion are non-collidable
+	for _, part in pairs(minion:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.CanCollide = false
+		end
+	end
 
 	print("Set up follow behavior for minion: " .. minion.Name)
 end
@@ -288,12 +357,9 @@ function MinionManager:CreateEmergencyMinion(minionData, player)
 
 	model.Parent = playerMinionsFolder
 
-	-- Create a weld constraint
-	local weld = Instance.new("WeldConstraint")
-	weld.Name = "FollowWeld"
-	weld.Part0 = rootPart
-	weld.Part1 = body
-	weld.Parent = model
+	-- Use the new follow behavior instead of weld
+	-- Set up the emergency minion to use the same follow behavior
+	self:SetupFollowBehavior(model, player)
 
 	-- Track it in active minions
 	self.ActiveMinions[minionData.UUID] = {
@@ -314,8 +380,20 @@ function MinionManager:DespawnMinion(minionUUID)
 		return false
 	end
 
-	-- Destroy the model
+	-- Disconnect any follow connection
 	if minionData.Model then
+		local connection = minionData.Model:GetAttribute("FollowConnection")
+		if connection then
+			-- We can't directly disconnect from the attribute, but we can clean up
+			-- all BodyPosition and BodyGyro objects
+			for _, part in pairs(minionData.Model:GetDescendants()) do
+				if part:IsA("BodyPosition") or part:IsA("BodyGyro") then
+					part:Destroy()
+				end
+			end
+		end
+
+		-- Destroy the model
 		minionData.Model:Destroy()
 	end
 
