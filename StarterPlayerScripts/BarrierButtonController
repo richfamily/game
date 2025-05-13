@@ -1,0 +1,206 @@
+-- BarrierButtonController.lua
+-- Place this in StarterPlayerScripts
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+-- Get the remote events
+local remotes = ReplicatedStorage:WaitForChild("Remotes")
+local removeBarrierEvent = remotes:WaitForChild("RemoveBarrier")
+local rebirthEvent = remotes:WaitForChild("PerformRebirth")
+
+-- Store temporary clones of removed barriers so we can track them
+local removedBarrierClones = {}
+
+-- Listen for barrier removal events from the server
+removeBarrierEvent.OnClientEvent:Connect(function(worldNum, zoneNum, isRestoring)
+    if worldNum == "rebirth_complete" then
+        -- Handle rebirth completion notification
+        print("Rebirth completed successfully")
+        return
+    end
+    
+    -- Find the barrier
+    local barrierName = "ZoneBarrier_" .. worldNum .. "_" .. zoneNum
+    local barrier = workspace:FindFirstChild(barrierName, true)
+    
+    if not barrier then
+        barrierName = "Barrier_" .. worldNum .. "_" .. zoneNum
+        barrier = workspace:FindFirstChild(barrierName, true)
+    end
+    
+    if isRestoring then
+        -- Restore the barrier by making it visible again
+        if barrier then
+            barrier.Parent = workspace -- Ensure it's in the workspace
+            barrier:SetAttribute("RemovedForPlayer_" .. player.UserId, nil)
+            
+            -- Make all parts in the barrier visible and collidable
+            for _, part in ipairs(barrier:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.Transparency = 0
+                    part.CanCollide = true
+                    
+                    -- Re-enable any SurfaceGuis
+                    for _, gui in ipairs(part:GetChildren()) do
+                        if gui:IsA("SurfaceGui") then
+                            gui.Enabled = true
+                        end
+                    end
+                end
+                
+                -- Re-enable any particle effects or beams
+                if part:IsA("ParticleEmitter") or part:IsA("Beam") or part:IsA("Trail") then
+                    part.Enabled = true
+                end
+            end
+            
+            -- Remove from our tracking
+            local barrierKey = worldNum .. "_" .. zoneNum
+            if removedBarrierClones[barrierKey] then
+                removedBarrierClones[barrierKey] = nil
+            end
+        else
+            warn("Could not find barrier to restore: " .. barrierName)
+        end
+    else
+        -- Remove the barrier by effectively hiding it
+        if barrier then
+            -- Mark this barrier as removed for this player
+            barrier:SetAttribute("RemovedForPlayer_" .. player.UserId, true)
+            
+            -- Hide all parts in the barrier
+            for _, part in ipairs(barrier:GetDescendants()) do
+                if part:IsA("BasePart") then
+                    part.Transparency = 1
+                    part.CanCollide = false
+                    
+                    -- Disable any SurfaceGuis
+                    for _, gui in ipairs(part:GetChildren()) do
+                        if gui:IsA("SurfaceGui") then
+                            gui.Enabled = false
+                        end
+                    end
+                end
+                
+                -- Disable any particle effects or beams
+                if part:IsA("ParticleEmitter") or part:IsA("Beam") or part:IsA("Trail") then
+                    part.Enabled = false
+                end
+            end
+            
+            -- Store a reference to this barrier
+            local barrierKey = worldNum .. "_" .. zoneNum
+            removedBarrierClones[barrierKey] = barrier
+        else
+            warn("Could not find barrier to remove: " .. barrierName)
+        end
+    end
+end)
+
+-- Function to perform rebirth (call this from a UI button)
+local function performRebirth()
+    print("Requesting rebirth...")
+    rebirthEvent:FireServer()
+end
+
+-- Make the rebirth function available for UI scripts
+_G.PerformRebirth = performRebirth
+
+-- Connect buttons to barriers
+local function connectButtonsToBarriers()
+    -- Patterns for barrier names
+    local patterns = {
+        "^ZoneBarrier_(%d+)_(%d+)$",
+        "^Barrier_(%d+)_(%d+)$"
+    }
+    
+    -- Find all barriers in the workspace
+    for _, barrier in ipairs(workspace:GetDescendants()) do
+        local worldNum, zoneNum
+        
+        -- Check if it's a barrier by name pattern
+        for _, pattern in ipairs(patterns) do
+            worldNum, zoneNum = barrier.Name:match(pattern)
+            if worldNum and zoneNum then
+                break
+            end
+        end
+        
+        if worldNum and zoneNum then
+            -- Convert to numbers
+            worldNum = tonumber(worldNum)
+            zoneNum = tonumber(zoneNum)
+            
+            -- Find any ImageButtons in the barrier
+            for _, desc in ipairs(barrier:GetDescendants()) do
+                if desc:IsA("ImageButton") then
+                    -- Connect this button to remove the barrier
+                    desc.MouseButton1Click:Connect(function()
+                        print("ImageButton clicked for barrier: " .. barrier.Name)
+                        removeBarrierEvent:FireServer(worldNum, zoneNum)
+                        
+                        -- Immediate visual feedback - disable the button's parent GUI
+                        local gui = desc
+                        while gui and not (gui:IsA("SurfaceGui") or gui:IsA("BillboardGui")) do
+                            gui = gui.Parent
+                        end
+                        
+                        if gui and (gui:IsA("SurfaceGui") or gui:IsA("BillboardGui")) then
+                            gui.Enabled = false
+                        end
+                    end)
+                end
+            end
+        end
+    end
+end
+
+-- Connect buttons when the game loads
+task.spawn(function()
+    -- Wait for game to fully load
+    task.wait(3)
+    connectButtonsToBarriers()
+    
+    -- Watch for new barriers that get added
+    workspace.DescendantAdded:Connect(function(descendant)
+        -- If it's an ImageButton inside a barrier, connect it
+        if descendant:IsA("ImageButton") then
+            -- Find parent barrier
+            local barrier = descendant
+            while barrier and barrier ~= workspace do
+                local worldNum, zoneNum
+                for _, pattern in ipairs({"^ZoneBarrier_(%d+)_(%d+)$", "^Barrier_(%d+)_(%d+)$"}) do
+                    worldNum, zoneNum = barrier.Name:match(pattern)
+                    if worldNum and zoneNum then
+                        break
+                    end
+                end
+                
+                if worldNum and zoneNum then
+                    -- Found a barrier parent, connect the button
+                    descendant.MouseButton1Click:Connect(function()
+                        print("ImageButton clicked for barrier: " .. barrier.Name)
+                        removeBarrierEvent:FireServer(tonumber(worldNum), tonumber(zoneNum))
+                        
+                        -- Immediate visual feedback - disable the button's parent GUI
+                        local gui = descendant
+                        while gui and not (gui:IsA("SurfaceGui") or gui:IsA("BillboardGui")) do
+                            gui = gui.Parent
+                        end
+                        
+                        if gui and (gui:IsA("SurfaceGui") or gui:IsA("BillboardGui")) then
+                            gui.Enabled = false
+                        end
+                    end)
+                    break
+                end
+                
+                barrier = barrier.Parent
+            end
+        end
+    end)
+end)
+
+print("BarrierButtonController initialized")
