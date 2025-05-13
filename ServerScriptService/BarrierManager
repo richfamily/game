@@ -1,0 +1,333 @@
+-- BarrierManager.lua
+-- Place this in ServerScriptService
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players = game:GetService("Players")
+local DataStoreService = game:GetService("DataStoreService")
+
+-- Initialize barrier store for saving progress
+local BarrierStore = DataStoreService:GetDataStore("PlayerBarriers")
+
+-- Create RemoteEvents folder if it doesn't exist
+local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+if not remotes then
+    remotes = Instance.new("Folder")
+    remotes.Name = "Remotes"
+    remotes.Parent = ReplicatedStorage
+    print("Created Remotes folder")
+end
+
+-- Create RemoteEvent for barrier interaction
+local removeBarrierEvent = remotes:FindFirstChild("RemoveBarrier")
+if not removeBarrierEvent then
+    removeBarrierEvent = Instance.new("RemoteEvent")
+    removeBarrierEvent.Name = "RemoveBarrier"
+    removeBarrierEvent.Parent = remotes
+    print("Created RemoveBarrier RemoteEvent")
+end
+
+-- Track opened barriers for all players
+local openBarriers = {}
+
+-- Store original barrier properties
+local barrierOriginalProps = {}
+
+-- Function to completely remove a barrier for a player
+local function removeBarrierForPlayer(player, worldNum, zoneNum)
+    local barrierKey = worldNum .. "_" .. zoneNum
+    
+    -- Find the barrier in workspace
+    local barrier = nil
+    
+    -- Check primary location: Workspace.Worlds.Spawn.MAP.Gates
+    local gatesFolder = workspace:FindFirstChild("Worlds")
+    if gatesFolder then
+        gatesFolder = gatesFolder:FindFirstChild("Spawn")
+        if gatesFolder then
+            gatesFolder = gatesFolder:FindFirstChild("MAP")
+            if gatesFolder then
+                gatesFolder = gatesFolder:FindFirstChild("Gates")
+                if gatesFolder then
+                    -- Try both naming patterns
+                    barrier = gatesFolder:FindFirstChild("ZoneBarrier_" .. worldNum .. "_" .. zoneNum)
+                    if not barrier then
+                        barrier = gatesFolder:FindFirstChild("Barrier_" .. worldNum .. "_" .. zoneNum)
+                    end
+                end
+            end
+        end
+    end
+    
+    -- If not found, check old location
+    if not barrier then
+        local oldGatesFolder = workspace:FindFirstChild("World")
+        if oldGatesFolder then
+            oldGatesFolder = oldGatesFolder:FindFirstChild("Spawn")
+            if oldGatesFolder then
+                oldGatesFolder = oldGatesFolder:FindFirstChild("Map")
+                if oldGatesFolder then
+                    oldGatesFolder = oldGatesFolder:FindFirstChild("Gates")
+                    if oldGatesFolder then
+                        oldGatesFolder = oldGatesFolder:FindFirstChild("Model")
+                        if oldGatesFolder then
+                            barrier = oldGatesFolder:FindFirstChild("Barrier_" .. worldNum .. "_" .. zoneNum)
+                            if not barrier then
+                                barrier = oldGatesFolder:FindFirstChild("ZoneBarrier_" .. worldNum .. "_" .. zoneNum)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    -- If still not found, search entire workspace
+    if not barrier then
+        barrier = workspace:FindFirstChild("ZoneBarrier_" .. worldNum .. "_" .. zoneNum, true)
+        if not barrier then
+            barrier = workspace:FindFirstChild("Barrier_" .. worldNum .. "_" .. zoneNum, true)
+        end
+    end
+    
+    if barrier then
+        -- Instead of changing properties, we'll use network ownership to control visibility
+        -- Store the barrier's properties if we haven't already
+        if not barrierOriginalProps[barrierKey] then
+            barrierOriginalProps[barrierKey] = {
+                CFrame = barrier:GetPivot(),
+                Parent = barrier.Parent
+            }
+        end
+        
+        -- Mark this barrier as open
+        if not openBarriers[barrierKey] then
+            openBarriers[barrierKey] = {}
+        end
+        
+        -- Add this player to the list of players who have removed this barrier
+        openBarriers[barrierKey][player.UserId] = true
+        
+        -- Notify the client to remove the barrier
+        removeBarrierEvent:FireClient(player, worldNum, zoneNum, false)
+        
+        print("Removed barrier " .. barrierKey .. " for player: " .. player.Name)
+        return true
+    else
+        warn("Barrier not found: " .. barrierKey)
+        return false
+    end
+end
+
+-- Function to restore a barrier for a player
+local function restoreBarrierForPlayer(player, worldNum, zoneNum)
+    local barrierKey = worldNum .. "_" .. zoneNum
+    
+    -- Check if barrier was open for this player
+    if not openBarriers[barrierKey] or not openBarriers[barrierKey][player.UserId] then
+        return true -- Already closed for this player
+    end
+    
+    -- Find the barrier in workspace
+    local barrier = nil
+    
+    -- Check primary location
+    local gatesFolder = workspace:FindFirstChild("Worlds")
+    if gatesFolder then
+        gatesFolder = gatesFolder:FindFirstChild("Spawn")
+        if gatesFolder then
+            gatesFolder = gatesFolder:FindFirstChild("MAP")
+            if gatesFolder then
+                gatesFolder = gatesFolder:FindFirstChild("Gates")
+                if gatesFolder then
+                    barrier = gatesFolder:FindFirstChild("ZoneBarrier_" .. worldNum .. "_" .. zoneNum)
+                    if not barrier then
+                        barrier = gatesFolder:FindFirstChild("Barrier_" .. worldNum .. "_" .. zoneNum)
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Check old location if needed
+    if not barrier then
+        local oldGatesFolder = workspace:FindFirstChild("World")
+        if oldGatesFolder then
+            oldGatesFolder = oldGatesFolder:FindFirstChild("Spawn")
+            if oldGatesFolder then
+                oldGatesFolder = oldGatesFolder:FindFirstChild("Map")
+                if oldGatesFolder then
+                    oldGatesFolder = oldGatesFolder:FindFirstChild("Gates")
+                    if oldGatesFolder then
+                        oldGatesFolder = oldGatesFolder:FindFirstChild("Model")
+                        if oldGatesFolder then
+                            barrier = oldGatesFolder:FindFirstChild("Barrier_" .. worldNum .. "_" .. zoneNum)
+                            if not barrier then
+                                barrier = oldGatesFolder:FindFirstChild("ZoneBarrier_" .. worldNum .. "_" .. zoneNum)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    
+    -- Search entire workspace if needed
+    if not barrier then
+        barrier = workspace:FindFirstChild("ZoneBarrier_" .. worldNum .. "_" .. zoneNum, true)
+        if not barrier then
+            barrier = workspace:FindFirstChild("Barrier_" .. worldNum .. "_" .. zoneNum, true)
+        end
+    end
+    
+    if barrier then
+        -- Remove this player from the list of players who have removed this barrier
+        if openBarriers[barrierKey] then
+            openBarriers[barrierKey][player.UserId] = nil
+            
+            -- If no players have this barrier open, we can clean up the entry
+            local anyOpen = false
+            for _, _ in pairs(openBarriers[barrierKey]) do
+                anyOpen = true
+                break
+            end
+            
+            if not anyOpen then
+                openBarriers[barrierKey] = nil
+            end
+        end
+        
+        -- Notify the client to restore the barrier
+        removeBarrierEvent:FireClient(player, worldNum, zoneNum, true)
+        
+        print("Restored barrier " .. barrierKey .. " for player: " .. player.Name)
+        return true
+    else
+        warn("Barrier not found for restoring: " .. barrierKey)
+        return false
+    end
+end
+
+-- Handler for RemoveBarrier event
+removeBarrierEvent.OnServerEvent:Connect(function(player, worldNum, zoneNum)
+    -- Remove the barrier for this player
+    if removeBarrierForPlayer(player, worldNum, zoneNum) then
+        -- Save the player's progress
+        local playerBarriers = {}
+        
+        -- Try to get existing data
+        local success, errorMessage = pcall(function()
+            playerBarriers = BarrierStore:GetAsync(player.UserId) or {}
+        end)
+        
+        if not success then
+            warn("Failed to load barriers for player " .. player.Name .. ": " .. errorMessage)
+            playerBarriers = {}
+        end
+        
+        -- Add this barrier to player's list if not already present
+        local barrierKey = worldNum .. "_" .. zoneNum
+        if not table.find(playerBarriers, barrierKey) then
+            table.insert(playerBarriers, barrierKey)
+            
+            -- Save updated list
+            pcall(function()
+                BarrierStore:SetAsync(player.UserId, playerBarriers)
+            end)
+        end
+    end
+end)
+
+-- Create a RemoteEvent for rebirth
+local rebirthEvent = remotes:FindFirstChild("PerformRebirth")
+if not rebirthEvent then
+    rebirthEvent = Instance.new("RemoteEvent")
+    rebirthEvent.Name = "PerformRebirth"
+    rebirthEvent.Parent = remotes
+    print("Created PerformRebirth RemoteEvent")
+end
+
+-- Handle rebirth event
+rebirthEvent.OnServerEvent:Connect(function(player)
+    -- Reset player's barriers except for the first zone
+    local playerBarriers = {"1_1"} -- Keep zone 1 open
+    
+    -- Save updated list
+    pcall(function()
+        BarrierStore:SetAsync(player.UserId, playerBarriers)
+    end)
+    
+    -- Close all barriers except zone 1
+    for barrierKey, playerList in pairs(openBarriers) do
+        if playerList[player.UserId] then
+            local worldNum, zoneNum = barrierKey:match("(%d+)_(%d+)")
+            
+            if worldNum and zoneNum then
+                worldNum = tonumber(worldNum)
+                zoneNum = tonumber(zoneNum)
+                
+                -- Keep zone 1 open, close all others
+                if zoneNum > 1 then
+                    restoreBarrierForPlayer(player, worldNum, zoneNum)
+                end
+            end
+        end
+    end
+    
+    -- Ensure zone 1 is open
+    removeBarrierForPlayer(player, 1, 1)
+    
+    -- Notify client about rebirth completion
+    removeBarrierEvent:FireClient(player, "rebirth_complete")
+end)
+
+-- When a player joins, load their barrier data
+Players.PlayerAdded:Connect(function(player)
+    print("Player joined: " .. player.Name)
+    
+    -- Wait for character to load
+    player.CharacterAdded:Connect(function()
+        -- Wait a moment for the game to fully load
+        task.wait(2)
+        
+        -- Load player's barrier data
+        local playerBarriers = {}
+        
+        local success, errorMessage = pcall(function()
+            playerBarriers = BarrierStore:GetAsync(player.UserId) or {}
+        end)
+        
+        if not success then
+            warn("Failed to load barriers for player " .. player.Name .. ": " .. errorMessage)
+            playerBarriers = {"1_1"} -- Default to having zone 1 open
+        end
+        
+        -- Open all barriers in the player's list
+        for _, barrierKey in ipairs(playerBarriers) do
+            local worldNum, zoneNum = barrierKey:match("(%d+)_(%d+)")
+            
+            if worldNum and zoneNum then
+                removeBarrierForPlayer(player, tonumber(worldNum), tonumber(zoneNum))
+            end
+        end
+    end)
+end)
+
+-- When a player leaves, save their barrier data
+Players.PlayerRemoving:Connect(function(player)
+    print("Player leaving: " .. player.Name)
+    
+    -- Collect all barriers this player has open
+    local playerBarriers = {}
+    for barrierKey, playerList in pairs(openBarriers) do
+        if playerList[player.UserId] then
+            table.insert(playerBarriers, barrierKey)
+        end
+    end
+    
+    -- Save to DataStore
+    pcall(function()
+        BarrierStore:SetAsync(player.UserId, playerBarriers)
+    end)
+end)
+
+print("BarrierManager initialized")
