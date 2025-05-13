@@ -122,7 +122,7 @@ function MinionManager:GetMinionModel(minionID, variant)
 	end
 
 	-- If we still can't find it, create a simple placeholder model
-	return self:CreateEmergencyMinion(minionData, player)
+	return nil
 end
 
 -- Setup a minion instance with the proper properties
@@ -183,12 +183,49 @@ function MinionManager:SetupMinion(minion, minionData, player)
 	minion.Parent = playerMinionsFolder
 
 	-- Make minion not collide with other minions or players
-	for _, part in ipairs(minion:GetDescendants()) do
+	-- Use two approaches for maximum compatibility
+
+	-- Approach 1: Set collision properties for all parts
+	for _, part in pairs(minion:GetDescendants()) do
 		if part:IsA("BasePart") then
 			part.CanCollide = false
 			part.Anchored = false
+
+			-- Create collision group for minions
+			part.CollisionGroup = "Minions"
 		end
 	end
+
+	-- Approach 2: Set up collision filtering using PhysicsService
+	pcall(function()
+		local PhysicsService = game:GetService("PhysicsService")
+
+		-- Create collision groups if they don't exist
+		local success = pcall(function()
+			PhysicsService:RegisterCollisionGroup("Minions")
+			PhysicsService:RegisterCollisionGroup("Players")
+		end)
+
+		if success then
+			-- Set collision group behavior to prevent minions from colliding with players
+			PhysicsService:CollisionGroupSetCollidable("Minions", "Players", false)
+			PhysicsService:CollisionGroupSetCollidable("Minions", "Minions", false)
+
+			-- Assign parts to collision groups
+			for _, part in pairs(minion:GetDescendants()) do
+				if part:IsA("BasePart") then
+					part.CollisionGroup = "Minions"
+				end
+			end
+
+			-- Assign player character parts to player collision group
+			for _, characterPart in pairs(character:GetDescendants()) do
+				if characterPart:IsA("BasePart") then
+					characterPart.CollisionGroup = "Players"
+				end
+			end
+		end
+	end)
 
 	-- Add nametag if it doesn't exist
 	if not minion:FindFirstChild("NameTag") and primaryPart then
@@ -212,7 +249,7 @@ function MinionManager:SetupMinion(minion, minionData, player)
 		nameLabel.Parent = billboardGui
 	end
 
-	-- Set up follow behavior with WeldConstraint for simplicity and reliability
+	-- Set up follow behavior with BodyPosition for smooth following
 	self:SetupFollowBehavior(minion, player)
 end
 
@@ -231,7 +268,7 @@ function MinionManager:SetupFollowBehavior(minion, player)
 
 	-- First remove any existing constraints
 	for _, child in pairs(minion:GetChildren()) do
-		if child:IsA("WeldConstraint") or child:IsA("AlignPosition") then
+		if child:IsA("WeldConstraint") or child:IsA("AlignPosition") or child:IsA("BodyPosition") or child:IsA("BodyGyro") then
 			child:Destroy()
 		end
 	end
@@ -279,12 +316,43 @@ function MinionManager:SetupFollowBehavior(minion, player)
 	-- Store the connection on the minion for cleanup
 	minion:SetAttribute("FollowConnection", tostring(connection))
 
-	-- Ensure all parts of the minion are non-collidable
+	-- Make sure ALL parts of the minion are non-collidable
 	for _, part in pairs(minion:GetDescendants()) do
 		if part:IsA("BasePart") then
 			part.CanCollide = false
+
+			-- Set network ownership for better performance
+			pcall(function()
+				part:SetNetworkOwner(player)
+			end)
+
+			-- Ensure transparency doesn't affect collision
+			if part.Transparency >= 0.95 then
+				part.CanTouch = false
+			end
 		end
 	end
+
+	-- Add specialized collision handler for physics edge cases
+	local heartbeatConnection
+	heartbeatConnection = RunService.Heartbeat:Connect(function()
+		if not minion or not minion.Parent then
+			if heartbeatConnection then
+				heartbeatConnection:Disconnect()
+			end
+			return
+		end
+
+		-- Re-apply CanCollide=false on every frame to handle any state changes
+		for _, part in pairs(minion:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.CanCollide = false
+			end
+		end
+	end)
+
+	-- Store this connection for cleanup
+	minion:SetAttribute("CollisionConnection", tostring(heartbeatConnection))
 
 	print("Set up follow behavior for minion: " .. minion.Name)
 end
@@ -312,6 +380,8 @@ function MinionManager:CreateEmergencyMinion(minionData, player)
 	body.Material = Enum.Material.Neon
 	body.CanCollide = false
 	body.Anchored = false
+	body.CanTouch = false  -- Disable touch events completely
+	body.CollisionGroup = "Minions"  -- Set collision group
 	body.Parent = model
 
 	model.PrimaryPart = body
@@ -333,7 +403,7 @@ function MinionManager:CreateEmergencyMinion(minionData, player)
 	nameLabel.TextStrokeColor3 = Color3.new(0, 0, 0)
 	nameLabel.Font = Enum.Font.GothamBold
 	nameLabel.TextSize = 14
-	nameLabel.Text = "Basic Minion"
+	nameLabel.Text = ""
 	nameLabel.Parent = billboardGui
 
 	-- Create folder structure if needed
@@ -368,6 +438,22 @@ function MinionManager:CreateEmergencyMinion(minionData, player)
 		Player = player
 	}
 
+	-- Set up collision handling with PhysicsService
+	pcall(function()
+		local PhysicsService = game:GetService("PhysicsService")
+
+		-- Create collision groups if they don't exist
+		local success = pcall(function()
+			PhysicsService:RegisterCollisionGroup("Minions")
+			PhysicsService:RegisterCollisionGroup("Players")
+		end)
+
+		if success then
+			-- Set collision group behavior to prevent minions from colliding with players
+			PhysicsService:CollisionGroupSetCollidable("Minions", "Players", false)
+		end
+	end)
+
 	print("Created emergency minion for player: " .. player.Name)
 	return true
 end
@@ -382,6 +468,7 @@ function MinionManager:DespawnMinion(minionUUID)
 
 	-- Disconnect any follow connection
 	if minionData.Model then
+		-- Disconnect follow connection
 		local connection = minionData.Model:GetAttribute("FollowConnection")
 		if connection then
 			-- We can't directly disconnect from the attribute, but we can clean up
@@ -389,6 +476,16 @@ function MinionManager:DespawnMinion(minionUUID)
 			for _, part in pairs(minionData.Model:GetDescendants()) do
 				if part:IsA("BodyPosition") or part:IsA("BodyGyro") then
 					part:Destroy()
+				end
+			end
+		end
+
+		-- Disconnect collision connection
+		local collisionConnection = minionData.Model:GetAttribute("CollisionConnection")
+		if collisionConnection then
+			for _, part in pairs(minionData.Model:GetDescendants()) do
+				if part:IsA("BasePart") then
+					part.CanCollide = false
 				end
 			end
 		end
@@ -421,5 +518,64 @@ function MinionManager:DespawnPlayerMinions(player)
 
 	return #minionsToRemove > 0
 end
+
+-- Initialize collision groups when the module loads
+local function setupCollisionGroups()
+	pcall(function()
+		local PhysicsService = game:GetService("PhysicsService")
+
+		-- Create collision groups
+		pcall(function()
+			PhysicsService:RegisterCollisionGroup("Minions")
+			PhysicsService:RegisterCollisionGroup("Players")
+		end)
+
+		-- Set collision behaviors
+		PhysicsService:CollisionGroupSetCollidable("Minions", "Players", false)
+		PhysicsService:CollisionGroupSetCollidable("Minions", "Minions", false)
+
+		-- Assign players to the Players collision group
+		local function setPlayerCollisionGroup(player)
+			if player.Character then
+				for _, part in pairs(player.Character:GetDescendants()) do
+					if part:IsA("BasePart") then
+						pcall(function()
+							part.CollisionGroup = "Players"
+						end)
+					end
+				end
+			end
+
+			player.CharacterAdded:Connect(function(character)
+				for _, part in pairs(character:GetDescendants()) do
+					if part:IsA("BasePart") then
+						pcall(function()
+							part.CollisionGroup = "Players"
+						end)
+					end
+				end
+
+				character.DescendantAdded:Connect(function(descendant)
+					if descendant:IsA("BasePart") then
+						pcall(function()
+							descendant.CollisionGroup = "Players"
+						end)
+					end
+				end)
+			end)
+		end
+
+		-- Set up collision groups for existing players
+		for _, player in pairs(Players:GetPlayers()) do
+			setPlayerCollisionGroup(player)
+		end
+
+		-- Set up collision groups for new players
+		Players.PlayerAdded:Connect(setPlayerCollisionGroup)
+	end)
+end
+
+-- Run the setup
+setupCollisionGroups()
 
 return MinionManager.new() -- Return an instance instead of the class
