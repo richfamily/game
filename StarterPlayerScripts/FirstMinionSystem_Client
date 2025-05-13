@@ -15,46 +15,46 @@ print("FirstMinionSystem_Client starting initialization...")
 
 -- Wait for remotes folder with better error handling
 local function waitForRemotes()
-    -- First check if it already exists
-    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
-    if remotes then
-        print("Found Remotes folder immediately")
-        return remotes
-    end
-    
-    -- If not, try waiting with a timeout
-    local startTime = tick()
-    local timeout = 10 -- 10 seconds timeout
-    
-    while tick() - startTime < timeout do
-        remotes = ReplicatedStorage:FindFirstChild("Remotes")
-        if remotes then
-            print("Found Remotes folder after waiting")
-            return remotes
-        end
-        task.wait(0.1)
-    end
-    
-    -- If still not found, create it
-    print("Remotes folder not found after waiting, creating a new one")
-    remotes = Instance.new("Folder")
-    remotes.Name = "Remotes"
-    remotes.Parent = ReplicatedStorage
-    return remotes
+	-- First check if it already exists
+	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	if remotes then
+		print("Found Remotes folder immediately")
+		return remotes
+	end
+
+	-- If not, try waiting with a timeout
+	local startTime = tick()
+	local timeout = 10 -- 10 seconds timeout
+
+	while tick() - startTime < timeout do
+		remotes = ReplicatedStorage:FindFirstChild("Remotes")
+		if remotes then
+			print("Found Remotes folder after waiting")
+			return remotes
+		end
+		task.wait(0.1)
+	end
+
+	-- If still not found, create it
+	print("Remotes folder not found after waiting, creating a new one")
+	remotes = Instance.new("Folder")
+	remotes.Name = "Remotes"
+	remotes.Parent = ReplicatedStorage
+	return remotes
 end
 
 -- Create a Remote if it doesn't exist
 local function ensureRemoteExists(remotes, name, className)
-    local remote = remotes:FindFirstChild(name)
-    if not remote then
-        print(name .. " remote not found, creating a new one")
-        remote = Instance.new(className)
-        remote.Name = name
-        remote.Parent = remotes
-    else
-        print("Found existing " .. name .. " remote")
-    end
-    return remote
+	local remote = remotes:FindFirstChild(name)
+	if not remote then
+		print(name .. " remote not found, creating a new one")
+		remote = Instance.new(className)
+		remote.Name = name
+		remote.Parent = remotes
+	else
+		print("Found existing " .. name .. " remote")
+	end
+	return remote
 end
 
 -- Wait for remotes folder
@@ -68,501 +68,514 @@ local getPlayerDataFunction = ensureRemoteExists(remotes, "GetPlayerData", "Remo
 
 -- Check if the player already has MinionUI
 local function removeExistingMinionUIs()
-    for _, gui in ipairs(player.PlayerGui:GetChildren()) do
-        if gui.Name:find("MinionUI") or gui.Name:find("AvatarUI") then
-            gui:Destroy()
-        end
-    end
+	for _, gui in ipairs(player.PlayerGui:GetChildren()) do
+		if gui.Name:find("MinionUI") or gui.Name:find("AvatarUI") then
+			gui:Destroy()
+		end
+	end
 end
 
 -- Create the UI for getting the first minion
 local function createFirstMinionUI()
-    print("Creating FirstMinionUI...")
-    
-    -- Remove any existing UIs first
-    removeExistingMinionUIs()
-    
-    -- Create the main UI
-    local screenGui = Instance.new("ScreenGui")
-    screenGui.Name = "FirstMinionUI"
-    screenGui.ResetOnSpawn = false
-    screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    screenGui.Parent = player.PlayerGui
-    
-    -- Create the welcome frame
-    local welcomeFrame = Instance.new("Frame")
-    welcomeFrame.Name = "WelcomeFrame"
-    welcomeFrame.Size = UDim2.new(0, 500, 0, 300)
-    welcomeFrame.Position = UDim2.new(0.5, -250, 0.5, -150)
-    welcomeFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    welcomeFrame.BorderSizePixel = 0
-    welcomeFrame.ClipsDescendants = true
-    welcomeFrame.Parent = screenGui
-    
-    -- Add corner radius
-    local cornerRadius = Instance.new("UICorner")
-    cornerRadius.CornerRadius = UDim.new(0, 8)
-    cornerRadius.Parent = welcomeFrame
-    
-    -- Add header
-    local headerFrame = Instance.new("Frame")
-    headerFrame.Name = "Header"
-    headerFrame.Size = UDim2.new(1, 0, 0, 50)
-    headerFrame.BackgroundColor3 = Color3.fromRGB(50, 50, 150)
-    headerFrame.BorderSizePixel = 0
-    headerFrame.Parent = welcomeFrame
-    
-    -- Add header corner radius
-    local headerCorner = Instance.new("UICorner")
-    headerCorner.CornerRadius = UDim.new(0, 8)
-    headerCorner.Parent = headerFrame
-    
-    -- Add header text
-    local headerText = Instance.new("TextLabel")
-    headerText.Name = "HeaderText"
-    headerText.Text = "Welcome to Minion Simulator!"
-    headerText.Font = Enum.Font.GothamBold
-    headerText.TextSize = 24
-    headerText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    headerText.Size = UDim2.new(1, 0, 1, 0)
-    headerText.BackgroundTransparency = 1
-    headerText.Parent = headerFrame
-    
-    -- Add minion image frame
-    local imageFrame = Instance.new("Frame")
-    imageFrame.Name = "MinionImageFrame"
-    imageFrame.Size = UDim2.new(0, 150, 0, 150)
-    imageFrame.Position = UDim2.new(0.5, -75, 0, 70)
-    imageFrame.BackgroundTransparency = 1
-    imageFrame.Parent = welcomeFrame
-    
-    -- Add minion image
-    local minionImage = Instance.new("ImageLabel")
-    minionImage.Name = "MinionImage"
-    minionImage.Size = UDim2.new(1, 0, 1, 0)
-    minionImage.BackgroundTransparency = 1
-    minionImage.Image = "rbxassetid://7545195293" -- Default minion image
-    minionImage.ScaleType = Enum.ScaleType.Fit
-    minionImage.Parent = imageFrame
-    
-    -- Add description text
-    local descriptionText = Instance.new("TextLabel")
-    descriptionText.Name = "Description"
-    descriptionText.Text = "Get your first minion to help you on your adventure!\n\nYour minion will follow you, help you collect coins, and defeat enemies."
-    descriptionText.Font = Enum.Font.Gotham
-    descriptionText.TextSize = 16
-    descriptionText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    descriptionText.TextWrapped = true
-    descriptionText.Size = UDim2.new(0.8, 0, 0, 60)
-    descriptionText.Position = UDim2.new(0.1, 0, 0, 230)
-    descriptionText.BackgroundTransparency = 1
-    descriptionText.Parent = welcomeFrame
-    
-    -- Add get minion button
-    local getMinionButton = Instance.new("TextButton")
-    getMinionButton.Name = "GetMinionButton"
-    getMinionButton.Text = "GET YOUR FIRST MINION"
-    getMinionButton.Font = Enum.Font.GothamBold
-    getMinionButton.TextSize = 18
-    getMinionButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-    getMinionButton.Size = UDim2.new(0.8, 0, 0, 50)
-    getMinionButton.Position = UDim2.new(0.1, 0, 1, -70)
-    getMinionButton.BackgroundColor3 = Color3.fromRGB(0, 180, 20)
-    getMinionButton.BorderSizePixel = 0
-    getMinionButton.ClipsDescendants = true
-    getMinionButton.AutoButtonColor = true
-    getMinionButton.Parent = welcomeFrame
-    
-    -- Add button corner radius
-    local buttonCorner = Instance.new("UICorner")
-    buttonCorner.CornerRadius = UDim.new(0, 8)
-    buttonCorner.Parent = getMinionButton
-    
-    -- Add ripple effect to button
-    getMinionButton.MouseButton1Down:Connect(function(x, y)
-        -- Create ripple effect
-        local ripple = Instance.new("Frame")
-        ripple.Name = "Ripple"
-        ripple.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-        ripple.BackgroundTransparency = 0.8
-        ripple.BorderSizePixel = 0
-        ripple.ZIndex = 10
-        
-        local pos = UDim2.new(0, x - getMinionButton.AbsolutePosition.X, 0, y - getMinionButton.AbsolutePosition.Y)
-        ripple.Position = pos
-        ripple.Size = UDim2.new(0, 0, 0, 0)
-        
-        local corner = Instance.new("UICorner")
-        corner.CornerRadius = UDim.new(1, 0) -- Circle
-        corner.Parent = ripple
-        
-        ripple.Parent = getMinionButton
-        
-        -- Animate ripple
-        local size = math.max(getMinionButton.AbsoluteSize.X, getMinionButton.AbsoluteSize.Y) * 2
-        local tween = TweenService:Create(ripple, TweenInfo.new(0.5), {
-            Size = UDim2.new(0, size, 0, size),
-            Position = UDim2.new(0, x - getMinionButton.AbsolutePosition.X - size/2, 0, y - getMinionButton.AbsolutePosition.Y - size/2),
-            BackgroundTransparency = 1
-        })
-        
-        tween:Play()
-        
-        task.delay(0.5, function()
-            ripple:Destroy()
-        end)
-    end)
-    
-    -- Add click handler to button
-    getMinionButton.MouseButton1Click:Connect(function()
-        print("GetMinionButton clicked")
-        -- Disable button to prevent multiple clicks
-        getMinionButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
-        getMinionButton.Text = "GETTING MINION..."
-        getMinionButton.Active = false
-        
-        -- Show spinning animation on the minion image
-        local spinTween = TweenService:Create(minionImage, TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, -1), {
-            Rotation = 360
-        })
-        spinTween:Play()
-        
-        -- Fire the remote event to get the starter minion
-        getStarterMinionEvent:FireServer()
-        print("Fired GetStarterMinion event to server")
-        
-        -- Add failsafe to reset button if no response in 10 seconds
-        task.delay(10, function()
-            if screenGui.Parent and getMinionButton.Text == "GETTING MINION..." then
-                print("No response from server after 10 seconds, resetting button")
-                getMinionButton.BackgroundColor3 = Color3.fromRGB(0, 180, 20)
-                getMinionButton.Text = "GET YOUR FIRST MINION"
-                getMinionButton.Active = true
-                
-                spinTween:Cancel()
-                minionImage.Rotation = 0
-                
-                -- Show error notification
-                local notification = Instance.new("Frame")
-                notification.Name = "ErrorNotification"
-                notification.Size = UDim2.new(0, 300, 0, 50)
-                notification.Position = UDim2.new(0.5, -150, 0, -50)
-                notification.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-                notification.BorderSizePixel = 0
-                notification.Parent = screenGui
-                
-                -- Add corner radius
-                local notificationCorner = Instance.new("UICorner")
-                notificationCorner.CornerRadius = UDim.new(0, 8)
-                notificationCorner.Parent = notification
-                
-                -- Add text
-                local notificationText = Instance.new("TextLabel")
-                notificationText.Name = "Text"
-                notificationText.Text = "Error: No response from server. Please try again."
-                notificationText.Font = Enum.Font.GothamBold
-                notificationText.TextSize = 16
-                notificationText.TextColor3 = Color3.fromRGB(255, 255, 255)
-                notificationText.Size = UDim2.new(1, 0, 1, 0)
-                notificationText.BackgroundTransparency = 1
-                notificationText.Parent = notification
-                
-                -- Animate notification appearing
-                TweenService:Create(notification, TweenInfo.new(0.5, Enum.EasingStyle.Back), {
-                    Position = UDim2.new(0.5, -150, 0, 10)
-                }):Play()
-                
-                -- Remove after 3 seconds
-                task.delay(3, function()
-                    if notification.Parent then
-                        TweenService:Create(notification, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
-                            Position = UDim2.new(0.5, -150, 0, -50)
-                        }):Play()
-                        
-                        task.delay(0.5, function()
-                            if notification.Parent then
-                                notification:Destroy()
-                            end
-                        end)
-                    end
-                end)
-            end
-        end)
-    end)
-    
-    -- Animate the welcome frame appearing
-    welcomeFrame.Position = UDim2.new(0.5, -250, 1.5, 0) -- Start off-screen
-    TweenService:Create(welcomeFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back), {
-        Position = UDim2.new(0.5, -250, 0.5, -150)
-    }):Play()
-    
-    print("FirstMinionUI created successfully")
-    return screenGui
+	print("Creating FirstMinionUI...")
+
+	-- Remove any existing UIs first
+	removeExistingMinionUIs()
+
+	-- Create the main UI
+	local screenGui = Instance.new("ScreenGui")
+	screenGui.Name = "FirstMinionUI"
+	screenGui.ResetOnSpawn = false
+	screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+	screenGui.Parent = player.PlayerGui
+
+	-- Create the welcome frame
+	local welcomeFrame = Instance.new("Frame")
+	welcomeFrame.Name = "WelcomeFrame"
+	welcomeFrame.Size = UDim2.new(0, 500, 0, 300)
+	welcomeFrame.Position = UDim2.new(0.5, -250, 0.5, -150)
+	welcomeFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	welcomeFrame.BorderSizePixel = 5
+	welcomeFrame.ClipsDescendants = true
+	welcomeFrame.Parent = screenGui
+	
+	-- Add UIStroke to the welcome frame
+	local welcomeFrameStroke = Instance.new("UIStroke")
+	welcomeFrameStroke.Color = Color3.fromRGB(0, 0, 0) -- Nice blue color, can be changed
+	welcomeFrameStroke.Thickness = 3
+	welcomeFrameStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	welcomeFrameStroke.Parent = welcomeFrame
+
+	-- Add corner radius
+	local cornerRadius = Instance.new("UICorner")
+	cornerRadius.CornerRadius = UDim.new(0, 8)
+	cornerRadius.Parent = welcomeFrame
+
+	-- Add header
+	local headerFrame = Instance.new("Frame")
+	headerFrame.Name = "Header"
+	headerFrame.Size = UDim2.new(1, 0, 0, 50)
+	headerFrame.BackgroundColor3 = Color3.fromRGB(255, 251, 47)
+	headerFrame.BorderSizePixel = 3
+	headerFrame.Parent = welcomeFrame
+
+	-- Add header corner radius
+	local headerCorner = Instance.new("UICorner")
+	headerCorner.CornerRadius = UDim.new(0, 8)
+	headerCorner.Parent = headerFrame
+
+	-- Add header text
+	local headerText = Instance.new("TextLabel")
+	headerText.Name = "HeaderText"
+	headerText.Text = "Welcome to Minion Simulator!"
+	headerText.Font = Enum.Font.GothamBold
+	headerText.TextSize = 24
+	headerText.TextColor3 = Color3.fromRGB(53, 53, 53)
+	headerText.Size = UDim2.new(1, 0, 1, 0)
+	headerText.BackgroundTransparency = 1
+	headerText.Parent = headerFrame
+
+	-- Add minion image frame
+	local imageFrame = Instance.new("Frame")
+	imageFrame.Name = "MinionImageFrame"
+	imageFrame.Size = UDim2.new(0, 150, 0, 150)
+	imageFrame.Position = UDim2.new(0.5, -75, 0, 70)
+	imageFrame.BackgroundTransparency = 1
+	imageFrame.Parent = welcomeFrame
+
+	-- Add minion image
+	local minionImage = Instance.new("ImageLabel")
+	minionImage.Name = "MinionImage"
+	minionImage.Size = UDim2.new(1, 0, 1, 0)
+	minionImage.BackgroundTransparency = 1
+	minionImage.Image = "rbxassetid://7545195293" -- Default minion image
+	minionImage.ScaleType = Enum.ScaleType.Fit
+	minionImage.Parent = imageFrame
+
+	-- Add description text
+	local descriptionText = Instance.new("TextLabel")
+	descriptionText.Name = "Description"
+	descriptionText.Text = "Get your first minion to help you on your adventure!"
+	descriptionText.Font = Enum.Font.Gotham
+	descriptionText.TextSize = 16
+	descriptionText.TextColor3 = Color3.fromRGB(60, 61, 61)
+	descriptionText.TextWrapped = true
+	descriptionText.Size = UDim2.new(0.8, 0, 0, 60)
+	descriptionText.Position = UDim2.new(0.1, 0, 0, 230)
+	descriptionText.BackgroundTransparency = 1
+	descriptionText.Parent = welcomeFrame
+
+	-- Add get minion button
+	local getMinionButton = Instance.new("TextButton")
+	getMinionButton.Name = "GetMinionButton"
+	getMinionButton.Text = "GET YOUR FIRST MINION"
+	getMinionButton.Font = Enum.Font.GothamBold
+	getMinionButton.TextSize = 18
+	getMinionButton.TextColor3 = Color3.fromRGB(51, 52, 52)
+	getMinionButton.Size = UDim2.new(0.8, 0, 0, 50)
+	getMinionButton.Position = UDim2.new(0.1, 0, 1, -70)
+	getMinionButton.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+	getMinionButton.BorderSizePixel = 5
+	getMinionButton.ClipsDescendants = true
+	getMinionButton.Parent = welcomeFrame
+
+	-- Add UIStroke to the button
+	local buttonStroke = Instance.new("UIStroke")
+	buttonStroke.Color = Color3.fromRGB(0, 140, 0) -- Darker green to complement the button, can be changed
+	buttonStroke.Thickness = 3
+	buttonStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+	buttonStroke.Parent = getMinionButton
+	
+	-- Add button corner radius
+	local buttonCorner = Instance.new("UICorner")
+	buttonCorner.CornerRadius = UDim.new(0, 8)
+	buttonCorner.Parent = getMinionButton
+
+	-- Add ripple effect to button
+	getMinionButton.MouseButton1Down:Connect(function(x, y)
+		-- Create ripple effect
+		local ripple = Instance.new("Frame")
+		ripple.Name = "Ripple"
+		ripple.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+		ripple.BackgroundTransparency = 0.8
+		ripple.BorderSizePixel = 0
+		ripple.ZIndex = 10
+
+		local pos = UDim2.new(0, x - getMinionButton.AbsolutePosition.X, 0, y - getMinionButton.AbsolutePosition.Y)
+		ripple.Position = pos
+		ripple.Size = UDim2.new(0, 0, 0, 0)
+
+		local corner = Instance.new("UICorner")
+		corner.CornerRadius = UDim.new(1, 0) -- Circle
+		corner.Parent = ripple
+
+		ripple.Parent = getMinionButton
+
+		-- Animate ripple
+		local size = math.max(getMinionButton.AbsoluteSize.X, getMinionButton.AbsoluteSize.Y) * 2
+		local tween = TweenService:Create(ripple, TweenInfo.new(0.5), {
+			Size = UDim2.new(0, size, 0, size),
+			Position = UDim2.new(0, x - getMinionButton.AbsolutePosition.X - size/2, 0, y - getMinionButton.AbsolutePosition.Y - size/2),
+			BackgroundTransparency = 1
+		})
+
+		tween:Play()
+
+		task.delay(0.5, function()
+			ripple:Destroy()
+		end)
+	end)
+
+	-- Add click handler to button
+	getMinionButton.MouseButton1Click:Connect(function()
+		print("GetMinionButton clicked")
+		-- Disable button to prevent multiple clicks
+		getMinionButton.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+		getMinionButton.Text = "GETTING MINION..."
+		getMinionButton.Active = false
+
+		-- Show spinning animation on the minion image
+		local spinTween = TweenService:Create(minionImage, TweenInfo.new(2, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, -1), {
+			Rotation = 360
+		})
+		spinTween:Play()
+
+		-- Fire the remote event to get the starter minion
+		getStarterMinionEvent:FireServer()
+		print("Fired GetStarterMinion event to server")
+
+		-- Add failsafe to reset button if no response in 10 seconds
+		task.delay(10, function()
+			if screenGui.Parent and getMinionButton.Text == "GETTING MINION..." then
+				print("No response from server after 10 seconds, resetting button")
+				getMinionButton.BackgroundColor3 = Color3.fromRGB(0, 180, 20)
+				getMinionButton.Text = "GET YOUR FIRST MINION"
+				getMinionButton.Active = true
+
+				spinTween:Cancel()
+				minionImage.Rotation = 0
+
+				-- Show error notification
+				local notification = Instance.new("Frame")
+				notification.Name = "ErrorNotification"
+				notification.Size = UDim2.new(0, 300, 0, 50)
+				notification.Position = UDim2.new(0.5, -150, 0, -50)
+				notification.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+				notification.BorderSizePixel = 0
+				notification.Parent = screenGui
+
+				-- Add corner radius
+				local notificationCorner = Instance.new("UICorner")
+				notificationCorner.CornerRadius = UDim.new(0, 8)
+				notificationCorner.Parent = notification
+
+				-- Add text
+				local notificationText = Instance.new("TextLabel")
+				notificationText.Name = "Text"
+				notificationText.Text = "Error: No response from server. Please try again."
+				notificationText.Font = Enum.Font.GothamBold
+				notificationText.TextSize = 16
+				notificationText.TextColor3 = Color3.fromRGB(255, 255, 255)
+				notificationText.Size = UDim2.new(1, 0, 1, 0)
+				notificationText.BackgroundTransparency = 1
+				notificationText.Parent = notification
+
+				-- Animate notification appearing
+				TweenService:Create(notification, TweenInfo.new(0.5, Enum.EasingStyle.Back), {
+					Position = UDim2.new(0.5, -150, 0, 10)
+				}):Play()
+
+				-- Remove after 3 seconds
+				task.delay(3, function()
+					if notification.Parent then
+						TweenService:Create(notification, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+							Position = UDim2.new(0.5, -150, 0, -50)
+						}):Play()
+
+						task.delay(0.5, function()
+							if notification.Parent then
+								notification:Destroy()
+							end
+						end)
+					end
+				end)
+			end
+		end)
+	end)
+
+	-- Animate the welcome frame appearing
+	welcomeFrame.Position = UDim2.new(0.5, -250, 1.5, 0) -- Start off-screen
+	TweenService:Create(welcomeFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back), {
+		Position = UDim2.new(0.5, -250, 0.5, -150)
+	}):Play()
+
+	print("FirstMinionUI created successfully")
+	return screenGui
 end
 
 -- Show success UI after receiving first minion
 local function showSuccessUI(minionData)
-    print("Showing success UI for minion: " .. minionData.ID)
-    
-    -- Create a success UI
-    local successGui = Instance.new("ScreenGui")
-    successGui.Name = "MinionSuccessUI"
-    successGui.ResetOnSpawn = false
-    successGui.Parent = player.PlayerGui
-    
-    -- Create main frame
-    local successFrame = Instance.new("Frame")
-    successFrame.Name = "SuccessFrame"
-    successFrame.Size = UDim2.new(0, 400, 0, 250)
-    successFrame.Position = UDim2.new(0.5, -200, 0.5, -125)
-    successFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
-    successFrame.BorderSizePixel = 0
-    successFrame.Parent = successGui
-    
-    -- Add corner radius
-    local cornerRadius = Instance.new("UICorner")
-    cornerRadius.CornerRadius = UDim.new(0, 8)
-    cornerRadius.Parent = successFrame
-    
-    -- Add header
-    local headerFrame = Instance.new("Frame")
-    headerFrame.Name = "Header"
-    headerFrame.Size = UDim2.new(1, 0, 0, 50)
-    headerFrame.BackgroundColor3 = Color3.fromRGB(0, 150, 30)
-    headerFrame.BorderSizePixel = 0
-    headerFrame.Parent = successFrame
-    
-    -- Add header corner radius
-    local headerCorner = Instance.new("UICorner")
-    headerCorner.CornerRadius = UDim.new(0, 8)
-    headerCorner.Parent = headerFrame
-    
-    -- Add header text
-    local headerText = Instance.new("TextLabel")
-    headerText.Name = "HeaderText"
-    headerText.Text = "Minion Acquired!"
-    headerText.Font = Enum.Font.GothamBold
-    headerText.TextSize = 24
-    headerText.TextColor3 = Color3.fromRGB(255, 255, 255)
-    headerText.Size = UDim2.new(1, 0, 1, 0)
-    headerText.BackgroundTransparency = 1
-    headerText.Parent = headerFrame
-    
-    -- Format the minion name (from ID)
-    local minionName = minionData.ID:gsub("_", " ")
-    minionName = minionName:gsub("MINION", "")
-    minionName = minionName:gsub("^%s+", "")
-    if minionName == "" then minionName = "Basic" end
-    
-    -- Add minion name
-    local minionNameLabel = Instance.new("TextLabel")
-    minionNameLabel.Name = "MinionName"
-    minionNameLabel.Text = minionName .. " Minion (Level " .. minionData.Level .. ")"
-    minionNameLabel.Font = Enum.Font.GothamSemibold
-    minionNameLabel.TextSize = 18
-    minionNameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
-    minionNameLabel.Size = UDim2.new(1, 0, 0, 30)
-    minionNameLabel.Position = UDim2.new(0, 0, 0, 60)
-    minionNameLabel.BackgroundTransparency = 1
-    minionNameLabel.Parent = successFrame
-    
-    -- Add minion image
-    local minionImage = Instance.new("ImageLabel")
-    minionImage.Name = "MinionImage"
-    minionImage.Size = UDim2.new(0, 100, 0, 100)
-    minionImage.Position = UDim2.new(0.5, -50, 0, 100)
-    minionImage.BackgroundTransparency = 1
-    minionImage.Image = "rbxassetid://7545195293" -- Default minion image
-    minionImage.Parent = successFrame
-    
-    -- Add description
-    local description = Instance.new("TextLabel")
-    description.Name = "Description"
-    description.Text = "Your minion will follow you and help you on your adventure!"
-    description.Font = Enum.Font.Gotham
-    description.TextSize = 16
-    description.TextColor3 = Color3.fromRGB(255, 255, 255)
-    description.TextWrapped = true
-    description.Size = UDim2.new(0.8, 0, 0, 40)
-    description.Position = UDim2.new(0.1, 0, 0, 210)
-    description.BackgroundTransparency = 1
-    description.Parent = successFrame
-    
-    -- Animate the success frame appearing
-    successFrame.Position = UDim2.new(0.5, -200, -0.5, 0) -- Start off-screen
-    TweenService:Create(successFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back), {
-        Position = UDim2.new(0.5, -200, 0.5, -125)
-    }):Play()
-    
-    -- Animate the minion image
-    TweenService:Create(minionImage, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, -1, true), {
-        Position = UDim2.new(0.5, -50, 0, 90),
-        Size = UDim2.new(0, 110, 0, 110)
-    }):Play()
-    
-    -- Wait 5 seconds and then dismiss
-    task.delay(5, function()
-        if successFrame.Parent then
-            TweenService:Create(successFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
-                Position = UDim2.new(0.5, -200, 1.5, 0)
-            }):Play()
-            
-            task.delay(0.5, function()
-                if successGui.Parent then
-                    successGui:Destroy()
-                end
-            end)
-        end
-    end)
-    
-    print("Success UI shown and will auto-dismiss in 5 seconds")
+	print("Showing success UI for minion: " .. minionData.ID)
+
+	-- Create a success UI
+	local successGui = Instance.new("ScreenGui")
+	successGui.Name = "MinionSuccessUI"
+	successGui.ResetOnSpawn = false
+	successGui.Parent = player.PlayerGui
+
+	-- Create main frame
+	local successFrame = Instance.new("Frame")
+	successFrame.Name = "SuccessFrame"
+	successFrame.Size = UDim2.new(0, 400, 0, 250)
+	successFrame.Position = UDim2.new(0.5, -200, 0.5, -125)
+	successFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	successFrame.BorderSizePixel = 0
+	successFrame.Parent = successGui
+
+	-- Add corner radius
+	local cornerRadius = Instance.new("UICorner")
+	cornerRadius.CornerRadius = UDim.new(0, 8)
+	cornerRadius.Parent = successFrame
+
+	-- Add header
+	local headerFrame = Instance.new("Frame")
+	headerFrame.Name = "Header"
+	headerFrame.Size = UDim2.new(1, 0, 0, 50)
+	headerFrame.BackgroundColor3 = Color3.fromRGB(0, 150, 30)
+	headerFrame.BorderSizePixel = 0
+	headerFrame.Parent = successFrame
+
+	-- Add header corner radius
+	local headerCorner = Instance.new("UICorner")
+	headerCorner.CornerRadius = UDim.new(0, 8)
+	headerCorner.Parent = headerFrame
+
+	-- Add header text
+	local headerText = Instance.new("TextLabel")
+	headerText.Name = "HeaderText"
+	headerText.Text = "Minion Acquired!"
+	headerText.Font = Enum.Font.GothamBold
+	headerText.TextSize = 24
+	headerText.TextColor3 = Color3.fromRGB(255, 255, 255)
+	headerText.Size = UDim2.new(1, 0, 1, 0)
+	headerText.BackgroundTransparency = 1
+	headerText.Parent = headerFrame
+
+	-- Format the minion name (from ID)
+	local minionName = minionData.ID:gsub("_", " ")
+	minionName = minionName:gsub("MINION", "")
+	minionName = minionName:gsub("^%s+", "")
+	if minionName == "" then minionName = "Basic" end
+
+	-- Add minion name
+	local minionNameLabel = Instance.new("TextLabel")
+	minionNameLabel.Name = "MinionName"
+	minionNameLabel.Text = minionName .. " Minion (Level " .. minionData.Level .. ")"
+	minionNameLabel.Font = Enum.Font.GothamSemibold
+	minionNameLabel.TextSize = 18
+	minionNameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	minionNameLabel.Size = UDim2.new(1, 0, 0, 30)
+	minionNameLabel.Position = UDim2.new(0, 0, 0, 60)
+	minionNameLabel.BackgroundTransparency = 1
+	minionNameLabel.Parent = successFrame
+
+	-- Add minion image
+	local minionImage = Instance.new("ImageLabel")
+	minionImage.Name = "MinionImage"
+	minionImage.Size = UDim2.new(0, 100, 0, 100)
+	minionImage.Position = UDim2.new(0.5, -50, 0, 100)
+	minionImage.BackgroundTransparency = 1
+	minionImage.Image = "rbxassetid://7545195293" -- Default minion image
+	minionImage.Parent = successFrame
+
+	-- Add description
+	local description = Instance.new("TextLabel")
+	description.Name = "Description"
+	description.Text = "Your minion will follow you and help you on your adventure!"
+	description.Font = Enum.Font.Gotham
+	description.TextSize = 16
+	description.TextColor3 = Color3.fromRGB(255, 255, 255)
+	description.TextWrapped = true
+	description.Size = UDim2.new(0.8, 0, 0, 40)
+	description.Position = UDim2.new(0.1, 0, 0, 210)
+	description.BackgroundTransparency = 1
+	description.Parent = successFrame
+
+	-- Animate the success frame appearing
+	successFrame.Position = UDim2.new(0.5, -200, -0.5, 0) -- Start off-screen
+	TweenService:Create(successFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back), {
+		Position = UDim2.new(0.5, -200, 0.5, -125)
+	}):Play()
+
+	-- Animate the minion image
+	TweenService:Create(minionImage, TweenInfo.new(1, Enum.EasingStyle.Quad, Enum.EasingDirection.InOut, -1, true), {
+		Position = UDim2.new(0.5, -50, 0, 90),
+		Size = UDim2.new(0, 110, 0, 110)
+	}):Play()
+
+	-- Wait 5 seconds and then dismiss
+	task.delay(5, function()
+		if successFrame.Parent then
+			TweenService:Create(successFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+				Position = UDim2.new(0.5, -200, 1.5, 0)
+			}):Play()
+
+			task.delay(0.5, function()
+				if successGui.Parent then
+					successGui:Destroy()
+				end
+			end)
+		end
+	end)
+
+	print("Success UI shown and will auto-dismiss in 5 seconds")
 end
 
 -- Event handler for UI updates
 updateUIEvent.OnClientEvent:Connect(function(data)
-    print("Received UpdateUI event with type: " .. (data.Type or "nil"))
-    
-    if data.Type == "StarterMinionReceived" then
-        -- Close the first minion UI
-        local firstMinionUI = player.PlayerGui:FindFirstChild("FirstMinionUI")
-        if firstMinionUI then
-            print("Closing FirstMinionUI")
-            
-            -- Animate frame disappearing
-            local welcomeFrame = firstMinionUI:FindFirstChild("WelcomeFrame")
-            if welcomeFrame then
-                TweenService:Create(welcomeFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
-                    Position = UDim2.new(0.5, -250, -0.5, 0)
-                }):Play()
-                
-                task.delay(0.5, function()
-                    if firstMinionUI.Parent then
-                        firstMinionUI:Destroy()
-                    end
-                end)
-            else
-                firstMinionUI:Destroy()
-            end
-        end
-        
-        -- Show the success UI
-        showSuccessUI(data.Minion)
-    elseif data.Type == "StarterMinionError" then
-        -- Player already has minions, show error
-        local firstMinionUI = player.PlayerGui:FindFirstChild("FirstMinionUI")
-        if firstMinionUI then
-            print("Showing error message in FirstMinionUI")
-            
-            local getMinionButton = firstMinionUI.WelcomeFrame:FindFirstChild("GetMinionButton")
-            if getMinionButton then
-                getMinionButton.BackgroundColor3 = Color3.fromRGB(0, 180, 20)
-                getMinionButton.Text = "GET YOUR FIRST MINION"
-                getMinionButton.Active = true
-            end
-            
-            -- Show toast notification
-            local notification = Instance.new("Frame")
-            notification.Name = "ErrorNotification"
-            notification.Size = UDim2.new(0, 300, 0, 50)
-            notification.Position = UDim2.new(0.5, -150, 0, -50)
-            notification.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-            notification.BorderSizePixel = 0
-            notification.Parent = firstMinionUI
-            
-            -- Add corner radius
-            local notificationCorner = Instance.new("UICorner")
-            notificationCorner.CornerRadius = UDim.new(0, 8)
-            notificationCorner.Parent = notification
-            
-            -- Add text
-            local notificationText = Instance.new("TextLabel")
-            notificationText.Name = "Text"
-            notificationText.Text = data.ErrorMessage or "Error: You already have minions!"
-            notificationText.Font = Enum.Font.GothamBold
-            notificationText.TextSize = 16
-            notificationText.TextColor3 = Color3.fromRGB(255, 255, 255)
-            notificationText.Size = UDim2.new(1, 0, 1, 0)
-            notificationText.BackgroundTransparency = 1
-            notificationText.Parent = notification
-            
-            -- Animate notification appearing
-            TweenService:Create(notification, TweenInfo.new(0.5, Enum.EasingStyle.Back), {
-                Position = UDim2.new(0.5, -150, 0, 10)
-            }):Play()
-            
-            -- Remove after 3 seconds
-            task.delay(3, function()
-                if notification.Parent then
-                    TweenService:Create(notification, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
-                        Position = UDim2.new(0.5, -150, 0, -50)
-                    }):Play()
-                    
-                    task.delay(0.5, function()
-                        if notification.Parent then
-                            notification:Destroy()
-                        end
-                    end)
-                end
-            end)
-        end
-    end
+	print("Received UpdateUI event with type: " .. (data.Type or "nil"))
+
+	if data.Type == "StarterMinionReceived" then
+		-- Close the first minion UI
+		local firstMinionUI = player.PlayerGui:FindFirstChild("FirstMinionUI")
+		if firstMinionUI then
+			print("Closing FirstMinionUI")
+
+			-- Animate frame disappearing
+			local welcomeFrame = firstMinionUI:FindFirstChild("WelcomeFrame")
+			if welcomeFrame then
+				TweenService:Create(welcomeFrame, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+					Position = UDim2.new(0.5, -250, -0.5, 0)
+				}):Play()
+
+				task.delay(0.5, function()
+					if firstMinionUI.Parent then
+						firstMinionUI:Destroy()
+					end
+				end)
+			else
+				firstMinionUI:Destroy()
+			end
+		end
+
+		-- Show the success UI
+		showSuccessUI(data.Minion)
+	elseif data.Type == "StarterMinionError" then
+		-- Player already has minions, show error
+		local firstMinionUI = player.PlayerGui:FindFirstChild("FirstMinionUI")
+		if firstMinionUI then
+			print("Showing error message in FirstMinionUI")
+
+			local getMinionButton = firstMinionUI.WelcomeFrame:FindFirstChild("GetMinionButton")
+			if getMinionButton then
+				getMinionButton.BackgroundColor3 = Color3.fromRGB(0, 180, 20)
+				getMinionButton.Text = "GET YOUR FIRST MINION"
+				getMinionButton.Active = true
+			end
+
+			-- Show toast notification
+			local notification = Instance.new("Frame")
+			notification.Name = "ErrorNotification"
+			notification.Size = UDim2.new(0, 300, 0, 50)
+			notification.Position = UDim2.new(0.5, -150, 0, -50)
+			notification.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+			notification.BorderSizePixel = 0
+			notification.Parent = firstMinionUI
+
+			-- Add corner radius
+			local notificationCorner = Instance.new("UICorner")
+			notificationCorner.CornerRadius = UDim.new(0, 8)
+			notificationCorner.Parent = notification
+
+			-- Add text
+			local notificationText = Instance.new("TextLabel")
+			notificationText.Name = "Text"
+			notificationText.Text = data.ErrorMessage or "Error: You already have minions!"
+			notificationText.Font = Enum.Font.GothamBold
+			notificationText.TextSize = 16
+			notificationText.TextColor3 = Color3.fromRGB(255, 255, 255)
+			notificationText.Size = UDim2.new(1, 0, 1, 0)
+			notificationText.BackgroundTransparency = 1
+			notificationText.Parent = notification
+
+			-- Animate notification appearing
+			TweenService:Create(notification, TweenInfo.new(0.5, Enum.EasingStyle.Back), {
+				Position = UDim2.new(0.5, -150, 0, 10)
+			}):Play()
+
+			-- Remove after 3 seconds
+			task.delay(3, function()
+				if notification.Parent then
+					TweenService:Create(notification, TweenInfo.new(0.5, Enum.EasingStyle.Back, Enum.EasingDirection.In), {
+						Position = UDim2.new(0.5, -150, 0, -50)
+					}):Play()
+
+					task.delay(0.5, function()
+						if notification.Parent then
+							notification:Destroy()
+						end
+					end)
+				end
+			end)
+		end
+	end
 end)
 
 -- Event handler for PlayerReady
 playerReadyEvent.OnClientEvent:Connect(function(data)
-    print("Received PlayerReady event")
-    
-    -- Check if the player has minions
-    if data and data.PlayerData then
-        if not data.PlayerData.Minions or #data.PlayerData.Minions == 0 then
-            -- Player has no minions, show the UI
-            print("Player has no minions, showing FirstMinionUI")
-            task.delay(2, function() -- Short delay to let game initialize
-                createFirstMinionUI()
-            end)
-        else
-            print("Player already has " .. #data.PlayerData.Minions .. " minions, not showing UI")
-        end
-    else
-        print("PlayerReady event received but no player data found")
-    end
+	print("Received PlayerReady event")
+
+	-- Check if the player has minions
+	if data and data.PlayerData then
+		if not data.PlayerData.Minions or #data.PlayerData.Minions == 0 then
+			-- Player has no minions, show the UI
+			print("Player has no minions, showing FirstMinionUI")
+			task.delay(2, function() -- Short delay to let game initialize
+				createFirstMinionUI()
+			end)
+		else
+			print("Player already has " .. #data.PlayerData.Minions .. " minions, not showing UI")
+		end
+	else
+		print("PlayerReady event received but no player data found")
+	end
 end)
 
 -- Check if player doesn't have minions when loading the game
 task.delay(5, function() -- Give time for PlayerReady event
-    -- If no FirstMinionUI exists yet, try to show one
-    if not player.PlayerGui:FindFirstChild("FirstMinionUI") and not player.PlayerGui:FindFirstChild("MinionSuccessUI") then
-        print("No UI shown after 5 seconds, checking if player has minions")
-        
-        -- Get player data
-        if getPlayerDataFunction then
-            local success, playerData = pcall(function()
-                return getPlayerDataFunction:InvokeServer()
-            end)
-            
-            if success and playerData then
-                print("Successfully got player data from server")
-                
-                -- Check if player has no minions
-                if not playerData.Minions or #playerData.Minions == 0 then
-                    print("Player has no minions, showing FirstMinionUI")
-                    createFirstMinionUI()
-                else
-                    print("Player already has " .. #playerData.Minions .. " minions, not showing UI")
-                end
-            else
-                -- Couldn't get player data, show UI anyway as fallback
-                warn("Failed to get player data, showing FirstMinionUI as fallback")
-                createFirstMinionUI()
-            end
-        else
-            -- If we can't check for player data, show the UI as a fallback
-            warn("GetPlayerData function not found, showing FirstMinionUI as fallback")
-            createFirstMinionUI()
-        end
-    else
-        print("FirstMinionUI or MinionSuccessUI already exists, not creating another")
-    end
+	-- If no FirstMinionUI exists yet, try to show one
+	if not player.PlayerGui:FindFirstChild("FirstMinionUI") and not player.PlayerGui:FindFirstChild("MinionSuccessUI") then
+		print("No UI shown after 5 seconds, checking if player has minions")
+
+		-- Get player data
+		if getPlayerDataFunction then
+			local success, playerData = pcall(function()
+				return getPlayerDataFunction:InvokeServer()
+			end)
+
+			if success and playerData then
+				print("Successfully got player data from server")
+
+				-- Check if player has no minions
+				if not playerData.Minions or #playerData.Minions == 0 then
+					print("Player has no minions, showing FirstMinionUI")
+					createFirstMinionUI()
+				else
+					print("Player already has " .. #playerData.Minions .. " minions, not showing UI")
+				end
+			else
+				-- Couldn't get player data, show UI anyway as fallback
+				warn("Failed to get player data, showing FirstMinionUI as fallback")
+				createFirstMinionUI()
+			end
+		else
+			-- If we can't check for player data, show the UI as a fallback
+			warn("GetPlayerData function not found, showing FirstMinionUI as fallback")
+			createFirstMinionUI()
+		end
+	else
+		print("FirstMinionUI or MinionSuccessUI already exists, not creating another")
+	end
 end)
 
 print("FirstMinionSystem client script initialized")
