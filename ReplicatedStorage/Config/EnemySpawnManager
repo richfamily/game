@@ -1,0 +1,520 @@
+--[[
+    EnemySpawnManager.lua
+    Handles spawning of passive enemies that players can defeat for rewards
+]]
+
+local EnemySpawnManager = {}
+EnemySpawnManager.__index = EnemySpawnManager
+
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerStorage = game:GetService("ServerStorage")
+local RunService = game:GetService("RunService")
+
+-- Import utility modules
+local Utilities = require(ReplicatedStorage.Modules.Utilities)
+
+function EnemySpawnManager.new()
+	local self = setmetatable({}, EnemySpawnManager)
+
+	-- Initialize properties
+	self.ActiveEnemies = {} -- Table to track all active enemies
+	self.ZoneEnemies = {}   -- Table to track enemies by zone
+	self.SpawnPoints = {}   -- Table to store spawn points for each zone
+	self.EnemyConfigs = {}  -- Table to store enemy configurations
+	self.MaxEnemiesPerZone = 10 -- Default max enemies per zone
+
+	return self
+end
+
+-- Load enemy configurations from a ModuleScript
+function EnemySpawnManager:LoadEnemyConfigs()
+	local success, result = pcall(function()
+		return require(ServerStorage.Config.EnemyConfig)
+	end)
+
+	if not success then
+		-- Try ReplicatedStorage as a fallback
+		success, result = pcall(function()
+			return require(ReplicatedStorage.Config.EnemyConfig)
+		end)
+	end
+
+	if success and result then
+		self.EnemyConfigs = result
+		print("Loaded enemy configurations successfully")
+	else
+		warn("Failed to load enemy configurations: " .. tostring(result))
+		-- Create default enemy config
+		self.EnemyConfigs = {
+			Enemies = {
+				{
+					ID = "BANANA_BASIC",
+					Name = "Basic Banana",
+					ModelID = "BANANA_BASIC_MODEL",
+					Health = 50,
+					RewardType = "Coins",
+					RewardAmount = 10,
+					SpawnRate = 70,
+					RespawnTime = 5,
+					ZoneRange = {1, 10}
+				},
+				{
+					ID = "BANANA_ELITE",
+					Name = "Elite Banana",
+					ModelID = "BANANA_ELITE_MODEL",
+					Health = 100,
+					RewardType = "Coins",
+					RewardAmount = 25,
+					SpawnRate = 20,
+					RespawnTime = 8,
+					ZoneRange = {1, 10}
+				},
+				{
+					ID = "BANANA_BOSS",
+					Name = "Boss Banana",
+					ModelID = "BANANA_BOSS_MODEL",
+					Health = 500,
+					RewardType = "Coins",
+					RewardAmount = 100,
+					SpawnRate = 10,
+					RespawnTime = 15,
+					ZoneRange = {1, 10}
+				}
+			},
+			ZoneSettings = {
+				{
+					ZoneID = "ZONE_1_1",
+					MaxEnemies = 10,
+					SpawnInterval = 2,
+					EnemyTypes = {"BANANA_BASIC", "BANANA_ELITE", "BANANA_BOSS"}
+				}
+			}
+		}
+	end
+end
+
+-- Initialize spawn points for a zone
+function EnemySpawnManager:InitializeSpawnPoints(zoneID, zoneInstance)
+	if not self.SpawnPoints[zoneID] then
+		self.SpawnPoints[zoneID] = {}
+	end
+
+	-- Look for EnemySpawnPoint objects in the zone
+	for _, child in pairs(zoneInstance:GetDescendants()) do
+		if child.Name == "EnemySpawnPoint" and child:IsA("BasePart") then
+			table.insert(self.SpawnPoints[zoneID], child)
+		end
+	end
+
+	-- If no spawn points were found, create some default ones
+	if #self.SpawnPoints[zoneID] == 0 then
+		warn("No spawn points found for zone: " .. zoneID .. ", creating default spawn points")
+
+		-- Get zone center as reference
+		local zoneCenter = zoneInstance.PrimaryPart and 
+			zoneInstance.PrimaryPart.Position or 
+			Vector3.new(0, 5, 0)
+
+		-- Create 5 default spawn points in a circle around the zone center
+		for i = 1, 5 do
+			local angle = (i / 5) * math.pi * 2
+			local offset = Vector3.new(math.cos(angle) * 20, 0, math.sin(angle) * 20)
+
+			local spawnPoint = Instance.new("Part")
+			spawnPoint.Name = "EnemySpawnPoint"
+			spawnPoint.Anchored = true
+			spawnPoint.CanCollide = false
+			spawnPoint.Transparency = 1
+			spawnPoint.Position = zoneCenter + offset
+			spawnPoint.Parent = zoneInstance
+
+			table.insert(self.SpawnPoints[zoneID], spawnPoint)
+		end
+	end
+
+	print("Initialized " .. #self.SpawnPoints[zoneID] .. " spawn points for zone: " .. zoneID)
+
+	-- Initialize enemies table for this zone
+	if not self.ZoneEnemies[zoneID] then
+		self.ZoneEnemies[zoneID] = {}
+	end
+
+	-- Find zone settings
+	local zoneSettings = nil
+	for _, settings in ipairs(self.EnemyConfigs.ZoneSettings) do
+		if settings.ZoneID == zoneID then
+			zoneSettings = settings
+			break
+		end
+	end
+
+	-- If no settings found, create default
+	if not zoneSettings then
+		zoneSettings = {
+			ZoneID = zoneID,
+			MaxEnemies = self.MaxEnemiesPerZone,
+			SpawnInterval = 2,
+			EnemyTypes = {}
+		}
+
+		-- Add all enemies that can spawn in this zone based on ZoneRange
+		local zoneNumber = tonumber(zoneID:match("_(%d+)$")) or 1
+		for _, enemy in ipairs(self.EnemyConfigs.Enemies) do
+			if enemy.ZoneRange and 
+				zoneNumber >= enemy.ZoneRange[1] and 
+				zoneNumber <= enemy.ZoneRange[2] then
+				table.insert(zoneSettings.EnemyTypes, enemy.ID)
+			end
+		end
+
+		table.insert(self.EnemyConfigs.ZoneSettings, zoneSettings)
+	end
+
+	-- Start spawning enemies for this zone
+	self:StartSpawningEnemies(zoneID, zoneSettings)
+end
+
+-- Start spawning enemies in a zone
+function EnemySpawnManager:StartSpawningEnemies(zoneID, zoneSettings)
+	-- Create a repeating task to spawn enemies
+	spawn(function()
+		while wait(zoneSettings.SpawnInterval) do
+			-- Check if we need to spawn more enemies
+			if #self.ZoneEnemies[zoneID] < zoneSettings.MaxEnemies then
+				self:SpawnEnemy(zoneID, zoneSettings)
+			end
+		end
+	end)
+end
+
+-- Spawn a single enemy in a zone
+function EnemySpawnManager:SpawnEnemy(zoneID, zoneSettings)
+	-- Select a random enemy type based on spawn rates
+	local totalSpawnRate = 0
+	local availableEnemies = {}
+
+	for _, enemyID in ipairs(zoneSettings.EnemyTypes) do
+		-- Find enemy config
+		for _, enemyConfig in ipairs(self.EnemyConfigs.Enemies) do
+			if enemyConfig.ID == enemyID then
+				table.insert(availableEnemies, enemyConfig)
+				totalSpawnRate = totalSpawnRate + enemyConfig.SpawnRate
+				break
+			end
+		end
+	end
+
+	if #availableEnemies == 0 then
+		warn("No enemy types available for zone: " .. zoneID)
+		return
+	end
+
+	-- Select a random enemy type based on spawn rates
+	local selectedEnemy = nil
+	local randomValue = math.random(1, totalSpawnRate)
+	local currentValue = 0
+
+	for _, enemyConfig in ipairs(availableEnemies) do
+		currentValue = currentValue + enemyConfig.SpawnRate
+		if randomValue <= currentValue then
+			selectedEnemy = enemyConfig
+			break
+		end
+	end
+
+	if not selectedEnemy then
+		selectedEnemy = availableEnemies[1] -- Fallback
+	end
+
+	-- Select a random spawn point
+	if not self.SpawnPoints[zoneID] or #self.SpawnPoints[zoneID] == 0 then
+		warn("No spawn points available for zone: " .. zoneID)
+		return
+	end
+
+	local spawnPoint = self.SpawnPoints[zoneID][math.random(1, #self.SpawnPoints[zoneID])]
+
+	-- Create the enemy model
+	local enemyModel = self:CreateEnemyModel(selectedEnemy, spawnPoint.Position, zoneID)
+	if not enemyModel then
+		warn("Failed to create enemy model for: " .. selectedEnemy.ID)
+		return
+	end
+
+	-- Add to active enemies list
+	local enemyUUID = Utilities.CreateUniqueID("ENEMY")
+	local enemyData = {
+		ID = selectedEnemy.ID,
+		UUID = enemyUUID,
+		Model = enemyModel,
+		Config = selectedEnemy,
+		Health = selectedEnemy.Health,
+		MaxHealth = selectedEnemy.Health,
+		ZoneID = zoneID,
+		SpawnPoint = spawnPoint,
+		IsDead = false
+	}
+
+	-- Store UUID on the model for easier lookup
+	enemyModel:SetAttribute("UUID", enemyUUID)
+
+	self.ActiveEnemies[enemyUUID] = enemyData
+	table.insert(self.ZoneEnemies[zoneID], enemyUUID)
+
+	return enemyData
+end
+
+-- Create an enemy model
+function EnemySpawnManager:CreateEnemyModel(enemyConfig, position, zoneID)
+	-- Find the enemy model in ReplicatedStorage
+	local modelTemplate = ReplicatedStorage.Assets.Enemies:FindFirstChild(enemyConfig.ModelID)
+	if not modelTemplate then
+		warn("Enemy model not found: " .. enemyConfig.ModelID)
+		return nil
+	end
+
+	-- Clone the model
+	local model = modelTemplate:Clone()
+	model.Name = enemyConfig.Name
+
+	-- Position the model
+	if model.PrimaryPart then
+		model:SetPrimaryPartCFrame(CFrame.new(position))
+	else
+		-- If no primary part, set position of all parts
+		for _, part in pairs(model:GetDescendants()) do
+			if part:IsA("BasePart") then
+				part.Position = position
+				break -- Just position the first part we find
+			end
+		end
+	end
+
+	-- Add health bar
+	local healthBar = Instance.new("BillboardGui")
+	healthBar.Name = "HealthBar"
+	healthBar.Size = UDim2.new(4, 0, 0.5, 0)
+	healthBar.StudsOffset = Vector3.new(0, 3, 0)
+	healthBar.AlwaysOnTop = true
+
+	local background = Instance.new("Frame")
+	background.Name = "Background"
+	background.Size = UDim2.new(1, 0, 1, 0)
+	background.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+	background.BorderSizePixel = 0
+	background.Parent = healthBar
+
+	local fill = Instance.new("Frame")
+	fill.Name = "Fill"
+	fill.Size = UDim2.new(1, 0, 1, 0)
+	fill.BackgroundColor3 = Color3.fromRGB(255, 0, 0)
+	fill.BorderSizePixel = 0
+	fill.Parent = background
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Name = "NameLabel"
+	nameLabel.Size = UDim2.new(1, 0, 1, 0)
+	nameLabel.Text = enemyConfig.Name
+	nameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.TextStrokeTransparency = 0
+	nameLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	nameLabel.Parent = healthBar
+
+	local enemyPart = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+	if enemyPart then
+		healthBar.Adornee = enemyPart
+		healthBar.Parent = model
+	end
+
+	-- Add clickable area for attacking
+	local clickDetector = Instance.new("ClickDetector")
+	clickDetector.Name = "EnemyClickDetector"
+	clickDetector.MaxActivationDistance = 32
+	clickDetector.Parent = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+
+	-- Add proximity prompt as an alternative interaction method
+	local proximityPrompt = Instance.new("ProximityPrompt")
+	proximityPrompt.Name = "EnemyAttackPrompt"
+	proximityPrompt.ObjectText = enemyConfig.Name
+	proximityPrompt.ActionText = "Attack"
+	proximityPrompt.HoldDuration = 0
+	proximityPrompt.MaxActivationDistance = 16
+	proximityPrompt.Parent = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+
+	-- Store the zone ID on the model
+	model:SetAttribute("ZoneID", zoneID)
+
+	-- Position in workspace
+	local enemiesFolder = workspace:FindFirstChild("Enemies")
+	if not enemiesFolder then
+		enemiesFolder = Instance.new("Folder")
+		enemiesFolder.Name = "Enemies"
+		enemiesFolder.Parent = workspace
+	end
+
+	local zoneFolder = enemiesFolder:FindFirstChild(zoneID)
+	if not zoneFolder then
+		zoneFolder = Instance.new("Folder")
+		zoneFolder.Name = zoneID
+		zoneFolder.Parent = enemiesFolder
+	end
+
+	model.Parent = zoneFolder
+
+	return model
+end
+
+-- Handle damage to an enemy
+function EnemySpawnManager:DamageEnemy(enemyUUID, damage, playerWhoAttacked)
+	local enemyData = self.ActiveEnemies[enemyUUID]
+	if not enemyData or enemyData.IsDead then
+		return 0, false
+	end
+
+	-- Apply damage
+	local actualDamage = math.min(enemyData.Health, damage)
+	enemyData.Health = enemyData.Health - actualDamage
+
+	-- Update health bar
+	local healthBar = enemyData.Model:FindFirstChild("HealthBar")
+	if healthBar and healthBar:FindFirstChild("Background") and 
+		healthBar.Background:FindFirstChild("Fill") then
+		local healthPercent = enemyData.Health / enemyData.MaxHealth
+		healthBar.Background.Fill.Size = UDim2.new(healthPercent, 0, 1, 0)
+	end
+
+	-- Check if enemy is defeated
+	local isDefeated = enemyData.Health <= 0
+	if isDefeated then
+		self:DefeatEnemy(enemyUUID, playerWhoAttacked)
+	end
+
+	return actualDamage, isDefeated
+end
+
+-- Process enemy defeat
+function EnemySpawnManager:DefeatEnemy(enemyUUID, playerWhoAttacked)
+	local enemyData = self.ActiveEnemies[enemyUUID]
+	if not enemyData or enemyData.IsDead then
+		return false
+	end
+
+	-- Mark as dead
+	enemyData.IsDead = true
+
+	-- Award rewards to player
+	if playerWhoAttacked then
+		self:AwardPlayerReward(playerWhoAttacked, enemyData.Config)
+	end
+
+	-- Start death animation/effect
+	local model = enemyData.Model
+	if model then
+		-- Play death effect
+		spawn(function()
+			-- Make model transparent
+			for _, part in pairs(model:GetDescendants()) do
+				if part:IsA("BasePart") then
+					-- Tween transparency
+					local tweenInfo = TweenInfo.new(1, Enum.EasingStyle.Linear)
+					local tween = game:GetService("TweenService"):Create(
+						part,
+						tweenInfo,
+						{Transparency = 1}
+					)
+					tween:Play()
+				end
+			end
+
+			-- Wait for the tween to complete
+			wait(1)
+
+			-- Remove the model
+			model:Destroy()
+		end)
+	end
+
+	-- Remove from zone enemies list
+	for i, uuid in ipairs(self.ZoneEnemies[enemyData.ZoneID]) do
+		if uuid == enemyUUID then
+			table.remove(self.ZoneEnemies[enemyData.ZoneID], i)
+			break
+		end
+	end
+
+	-- Remove from active enemies
+	self.ActiveEnemies[enemyUUID] = nil
+
+	-- Schedule respawn
+	delay(enemyData.Config.RespawnTime, function()
+		-- Find zone settings
+		local zoneSettings = nil
+		for _, settings in ipairs(self.EnemyConfigs.ZoneSettings) do
+			if settings.ZoneID == enemyData.ZoneID then
+				zoneSettings = settings
+				break
+			end
+		end
+
+		-- Only respawn if we're below the max enemies for this zone
+		if not zoneSettings or #self.ZoneEnemies[enemyData.ZoneID] >= zoneSettings.MaxEnemies then
+			return
+		end
+
+		-- Respawn the enemy
+		self:SpawnEnemy(enemyData.ZoneID, zoneSettings)
+	end)
+
+	return true
+end
+
+-- Award rewards to player
+function EnemySpawnManager:AwardPlayerReward(player, enemyConfig)
+	-- Import necessary modules
+	local DataManager = require(ReplicatedStorage.Modules.DataManager)
+	local CurrencyManager = require(ReplicatedStorage.Modules.CurrencyManager)
+
+	-- Create instances of the managers
+	local dataManager = DataManager.new()
+	local currencyManager = CurrencyManager.new()
+
+	-- Get player data
+	local playerData = dataManager:GetData(player)
+	if not playerData then
+		warn("Player data not found for: " .. player.Name)
+		return
+	end
+
+	-- Award the currency based on enemy config
+	if enemyConfig.RewardType == "Coins" then
+		currencyManager:AddCurrency(playerData, "Coins", enemyConfig.RewardAmount, dataManager, player)
+		print("Awarded " .. enemyConfig.RewardAmount .. " coins to " .. player.Name)
+	elseif enemyConfig.RewardType == "Diamonds" then
+		currencyManager:AddCurrency(playerData, "Diamonds", enemyConfig.RewardAmount, dataManager, player)
+		print("Awarded " .. enemyConfig.RewardAmount .. " diamonds to " .. player.Name)
+	elseif enemyConfig.RewardType == "Rubies" then
+		currencyManager:AddCurrency(playerData, "Rubies", enemyConfig.RewardAmount, dataManager, player)
+		print("Awarded " .. enemyConfig.RewardAmount .. " rubies to " .. player.Name)
+	end
+
+	-- Update stats
+	dataManager:IncrementData(player, "Stats.EnemiesDefeated", 1)
+
+	-- Create reward notification
+	local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+	if remotes then
+		local updateUIEvent = remotes:FindFirstChild("UpdateUI")
+		if updateUIEvent then
+			-- Send notification to player
+			updateUIEvent:FireClient(player, {
+				Type = "EnemyDefeated",
+				EnemyName = enemyConfig.Name,
+				RewardType = enemyConfig.RewardType,
+				RewardAmount = enemyConfig.RewardAmount
+			})
+		end
+	end
+end
+
+return EnemySpawnManager
