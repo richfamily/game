@@ -1,0 +1,116 @@
+--[[
+    EnemyConfig.lua
+    Defines enemy types, their stats, and spawn settings
+]]
+
+local EnemyConfig = {
+	-- Enemy type definitions
+	Enemies = {
+		-- Zone 1: Banana creatures
+		{
+			ID = "BANANA_BASIC",
+			Name = "Basic Banana",
+			Description = "A common banana creature that can be defeated for coins.",
+			ModelID = "BANANA_BASIC_MODEL",
+			Health = 50,
+			RewardType = "Coins",
+			RewardAmount = 10,
+			SpawnRate = 70, -- Percentage chance relative to other spawns
+			RespawnTime = 5, -- Time in seconds before respawning
+			ZoneRange = {1, 10} -- Enemy appears in zones 1-10
+		},
+		{
+			ID = "BANANA_ELITE",
+			Name = "Elite Banana",
+			Description = "A stronger banana creature with a golden peel.",
+			ModelID = "BANANA_ELITE_MODEL",
+			Health = 100,
+			RewardType = "Coins",
+			RewardAmount = 25,
+			SpawnRate = 20,
+			RespawnTime = 8,
+			ZoneRange = {1, 10}
+		},
+		{
+			ID = "BANANA_BOSS",
+			Name = "Banana King",
+			Description = "The ruler of all bananas, with a mighty crown.",
+			ModelID = "BANANA_BOSS_MODEL",
+			Health = 500,
+			RewardType = "Coins",
+			RewardAmount = 100,
+			SpawnRate = 10,
+			RespawnTime = 15,
+			ZoneRange = {1, 10}
+		},
+
+		-- Zone 2: Apple creatures
+		{
+			ID = "APPLE_BASIC",
+			Name = "Basic Apple",
+			Description = "A common apple creature found in the orchard zone.",
+			ModelID = "APPLE_BASIC_MODEL",
+			Health = 150,
+			RewardType = "Coins",
+			RewardAmount = 30,
+			SpawnRate = 70,
+			RespawnTime = 5,
+			ZoneRange = {11, 20}
+		},
+		{
+			ID = "APPLE_ELITE",
+			Name = "Elite Apple",
+			Description = "A rare golden apple with enhanced rewards.",
+			ModelID = "APPLE_ELITE_MODEL",
+			Health = 300,
+			RewardType = "Coins",
+			RewardAmount = 75,
+			SpawnRate = 20,
+			RespawnTime = 8,
+			ZoneRange = {11, 20}
+		},
+		{
+			ID = "APPLE_BOSS",
+			Name = "Apple Titan",
+			Description = "A massive apple creature that provides substantial rewards.",
+			ModelID = "APPLE_BOSS_MODEL",
+			Health = 1500,
+			RewardType = "Coins",
+			RewardAmount = 300,
+			SpawnRate = 10,
+			RespawnTime = 20,
+			ZoneRange = {11, 20}
+		}
+	},
+
+	-- Zone-specific spawn settings
+	ZoneSettings = {
+		{
+			ZoneID = "ZONE_1_1",
+			MaxEnemies = 10, -- Maximum number of enemies in the zone at once
+			SpawnInterval = 2, -- Time between spawn attempts
+			EnemyTypes = {"BANANA_BASIC", "BANANA_ELITE", "BANANA_BOSS"}
+		},
+		{
+			ZoneID = "ZONE_1_2",
+			MaxEnemies = 12,
+			SpawnInterval = 1.5,
+			EnemyTypes = {"BANANA_BASIC", "BANANA_ELITE", "BANANA_BOSS"}
+		},
+		{
+			ZoneID = "ZONE_1_11", -- First zone of the second area
+			MaxEnemies = 15,
+			SpawnInterval = 1.5,
+			EnemyTypes = {"APPLE_BASIC", "APPLE_ELITE", "APPLE_BOSS"}
+		}
+	},
+
+	-- Global settings
+	GlobalSettings = {
+		DefaultMaxEnemies = 10,
+		DefaultSpawnInterval = 2,
+		ScalingFactor = 1.2 -- Enemy stats scale by this factor for each zone beyond their minimum zone
+	}
+}
+
+return EnemyConfig
