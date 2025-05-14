@@ -1,0 +1,345 @@
+-- EnemyInteractionHandler.lua
+-- Client-side script for attacking enemies
+
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local remoteFolder = ReplicatedStorage:WaitForChild("Remotes")
+local attackEnemyEvent = remoteFolder:WaitForChild("AttackEnemy")
+local updateUIEvent = remoteFolder:WaitForChild("UpdateUI")
+
+-- Helper variables
+local autoAttackEnabled = false
+local attackCooldown = 1.0 -- Attack once per second
+local lastAttackTime = 0
+
+-- Calculate player damage
+local function calculatePlayerDamage()
+	-- Get player data from a RemoteFunction
+	local getPlayerDataFunction = remoteFolder:WaitForChild("GetPlayerData")
+
+	local playerData = getPlayerDataFunction:InvokeServer()
+	if not playerData then
+		return 10 -- Default damage if player data not available
+	end
+
+	-- Calculate total damage from equipped avatars/minions
+	local totalDamage = 0
+
+	-- Add avatar damage if they exist
+	if playerData.Avatars then
+		for _, avatar in ipairs(playerData.Avatars) do
+			if avatar.Equipped and avatar.Stats and avatar.Stats.Damage then
+				totalDamage = totalDamage + avatar.Stats.Damage
+			end
+		end
+	end
+
+	-- Add minion damage if they exist
+	if playerData.Minions then
+		for _, minion in ipairs(playerData.Minions) do
+			if minion.Equipped and minion.Stats and minion.Stats.Damage then
+				totalDamage = totalDamage + minion.Stats.Damage
+			end
+		end
+	end
+
+	-- Apply damage multiplier
+	if playerData.Multipliers and playerData.Multipliers.Damage then
+		totalDamage = totalDamage * playerData.Multipliers.Damage
+	end
+
+	-- Ensure minimum damage
+	if totalDamage < 1 then
+		totalDamage = 10 -- Minimum damage
+	end
+
+	return totalDamage
+end
+
+-- Attack enemy function
+local function attackEnemy(enemyModel)
+	-- Check cooldown
+	local currentTime = tick()
+	if currentTime - lastAttackTime < attackCooldown then
+		return
+	end
+
+	lastAttackTime = currentTime
+
+	-- Get UUID from the model
+	local enemyUUID = enemyModel:GetAttribute("UUID")
+	if not enemyUUID then
+		for _, descendant in pairs(enemyModel:GetDescendants()) do
+			if descendant:GetAttribute("UUID") then
+				enemyUUID = descendant:GetAttribute("UUID")
+				break
+			end
+		end
+	end
+
+	if not enemyUUID then
+		print("Could not find enemy UUID")
+		return
+	end
+
+	-- Calculate damage
+	local damage = calculatePlayerDamage()
+
+	-- Send attack event to server
+	attackEnemyEvent:FireServer(enemyUUID, damage)
+
+	-- Play attack animation or effect locally
+	local character = player.Character
+	if character then
+		-- Create a small visual effect to show attack
+		local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+		if humanoidRootPart then
+			-- Create a beam effect from player to enemy
+			local attachment0 = Instance.new("Attachment")
+			attachment0.Parent = humanoidRootPart
+
+			local enemyPart = enemyModel.PrimaryPart or enemyModel:FindFirstChildWhichIsA("BasePart")
+			if enemyPart then
+				local attachment1 = Instance.new("Attachment") 
+				attachment1.Parent = enemyPart
+
+				local beam = Instance.new("Beam")
+				beam.Attachment0 = attachment0
+				beam.Attachment1 = attachment1
+				beam.Width0 = 0.5
+				beam.Width1 = 0.5
+				beam.FaceCamera = true
+				beam.Color = ColorSequence.new(Color3.fromRGB(255, 255, 0))
+				beam.Parent = workspace.CurrentCamera
+
+				-- Remove after a short duration
+				game:GetService("Debris"):AddItem(attachment0, 0.3)
+				game:GetService("Debris"):AddItem(attachment1, 0.3)
+				game:GetService("Debris"):AddItem(beam, 0.3)
+			end
+		end
+	end
+end
+
+-- Connect to enemy click events
+local function connectEnemyInteractions()
+	-- Connect to all enemy click detectors in the workspace
+	workspace.DescendantAdded:Connect(function(descendant)
+		if descendant:IsA("ClickDetector") and descendant.Name == "EnemyClickDetector" then
+			descendant.MouseClick:Connect(function()
+				local enemyModel = descendant:FindFirstAncestorOfClass("Model")
+				if enemyModel then
+					attackEnemy(enemyModel)
+				end
+			end)
+		elseif descendant:IsA("ProximityPrompt") and descendant.Name == "EnemyAttackPrompt" then
+			descendant.Triggered:Connect(function()
+				local enemyModel = descendant:FindFirstAncestorOfClass("Model")
+				if enemyModel then
+					attackEnemy(enemyModel)
+				end
+			end)
+		end
+	end)
+
+	-- Connect to existing enemy click detectors
+	for _, descendant in pairs(workspace:GetDescendants()) do
+		if descendant:IsA("ClickDetector") and descendant.Name == "EnemyClickDetector" then
+			descendant.MouseClick:Connect(function()
+				local enemyModel = descendant:FindFirstAncestorOfClass("Model")
+				if enemyModel then
+					attackEnemy(enemyModel)
+				end
+			end)
+		elseif descendant:IsA("ProximityPrompt") and descendant.Name == "EnemyAttackPrompt" then
+			descendant.Triggered:Connect(function()
+				local enemyModel = descendant:FindFirstAncestorOfClass("Model")
+				if enemyModel then
+					attackEnemy(enemyModel)
+				end
+			end)
+		end
+	end
+end
+
+-- Handle UI updates for enemy damage
+updateUIEvent.OnClientEvent:Connect(function(data)
+	if data.Type == "EnemyDamaged" then
+		-- Show damage number above enemy
+		local enemyUUID = data.EnemyUUID
+		local damage = data.Damage
+
+		-- Find the enemy model in workspace
+		for _, descendant in pairs(workspace:GetDescendants()) do
+			if descendant:GetAttribute("UUID") == enemyUUID then
+				-- This is the enemy model or part
+				local enemyModel = descendant:IsA("Model") and descendant or descendant:FindFirstAncestorOfClass("Model")
+
+				if enemyModel then
+					-- Create damage number
+					local damageLabel = Instance.new("BillboardGui")
+					damageLabel.Name = "DamageNumber"
+					damageLabel.Size = UDim2.new(0, 100, 0, 40)
+					damageLabel.StudsOffset = Vector3.new(0, 5, 0)
+					damageLabel.Adornee = enemyModel.PrimaryPart or enemyModel:FindFirstChildWhichIsA("BasePart")
+
+					local textLabel = Instance.new("TextLabel")
+					textLabel.Size = UDim2.new(1, 0, 1, 0)
+					textLabel.BackgroundTransparency = 1
+					textLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+					textLabel.TextStrokeTransparency = 0
+					textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+					textLabel.Font = Enum.Font.GothamBold
+					textLabel.TextSize = 18
+					textLabel.Text = "-" .. tostring(math.floor(damage))
+					textLabel.Parent = damageLabel
+
+					damageLabel.Parent = enemyModel
+
+					-- Animate and remove
+					spawn(function()
+						for i = 1, 10 do
+							textLabel.Position = textLabel.Position + UDim2.new(0, 0, -0.02, 0)
+							textLabel.TextTransparency = i / 10
+							textLabel.TextStrokeTransparency = i / 10
+							wait(0.05)
+						end
+						damageLabel:Destroy()
+					end)
+				end
+
+				break
+			end
+		end
+	elseif data.Type == "EnemyDefeated" then
+		-- Show reward notification
+		local playerGui = player:FindFirstChild("PlayerGui")
+		if playerGui then
+			-- Create reward notification
+			local notification = Instance.new("ScreenGui")
+			notification.Name = "RewardNotification"
+
+			local frame = Instance.new("Frame")
+			frame.Size = UDim2.new(0, 200, 0, 80)
+			frame.Position = UDim2.new(0.5, -100, 0.7, 0)
+			frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+			frame.BackgroundTransparency = 0.5
+			frame.BorderSizePixel = 0
+
+			local enemyNameLabel = Instance.new("TextLabel")
+			enemyNameLabel.Size = UDim2.new(1, 0, 0.5, 0)
+			enemyNameLabel.BackgroundTransparency = 1
+			enemyNameLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+			enemyNameLabel.Font = Enum.Font.GothamSemibold
+			enemyNameLabel.TextSize = 16
+			enemyNameLabel.Text = "Defeated " .. data.EnemyName
+			enemyNameLabel.Parent = frame
+
+			local rewardLabel = Instance.new("TextLabel")
+			rewardLabel.Size = UDim2.new(1, 0, 0.5, 0)
+			rewardLabel.Position = UDim2.new(0, 0, 0.5, 0)
+			rewardLabel.BackgroundTransparency = 1
+			rewardLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+			rewardLabel.Font = Enum.Font.GothamSemibold
+			rewardLabel.TextSize = 16
+			rewardLabel.Text = "+" .. data.RewardAmount .. " " .. data.RewardType
+			rewardLabel.Parent = frame
+
+			frame.Parent = notification
+			notification.Parent = playerGui
+
+			-- Remove after 3 seconds
+			delay(3, function()
+				notification:Destroy()
+			end)
+		end
+	end
+end)
+
+-- Toggle auto-attack with a key
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+
+	if input.KeyCode == Enum.KeyCode.F then
+		autoAttackEnabled = not autoAttackEnabled
+
+		-- Show auto-attack status
+		local playerGui = player:FindFirstChild("PlayerGui")
+		if playerGui then
+			-- Find or create auto-attack status indicator
+			local statusGui = playerGui:FindFirstChild("AutoAttackStatus")
+			if not statusGui then
+				statusGui = Instance.new("ScreenGui")
+				statusGui.Name = "AutoAttackStatus"
+
+				local frame = Instance.new("Frame")
+				frame.Size = UDim2.new(0, 200, 0, 40)
+				frame.Position = UDim2.new(0, 10, 0, 10)
+				frame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+				frame.BackgroundTransparency = 0.5
+				frame.BorderSizePixel = 0
+
+				local statusLabel = Instance.new("TextLabel")
+				statusLabel.Name = "StatusLabel"
+				statusLabel.Size = UDim2.new(1, 0, 1, 0)
+				statusLabel.BackgroundTransparency = 1
+				statusLabel.Font = Enum.Font.GothamSemibold
+				statusLabel.TextSize = 16
+				statusLabel.Parent = frame
+
+				frame.Parent = statusGui
+				statusGui.Parent = playerGui
+			end
+
+			local statusLabel = statusGui.Frame.StatusLabel
+			if autoAttackEnabled then
+				statusLabel.Text = "Auto-Attack: ON"
+				statusLabel.TextColor3 = Color3.fromRGB(0, 255, 0)
+			else
+				statusLabel.Text = "Auto-Attack: OFF"
+				statusLabel.TextColor3 = Color3.fromRGB(255, 0, 0)
+			end
+		end
+	end
+end)
+
+-- Auto-attack logic
+RunService.Heartbeat:Connect(function()
+	if not autoAttackEnabled then return end
+
+	-- Find nearest enemy
+	local character = player.Character
+	if not character or not character:FindFirstChild("HumanoidRootPart") then return end
+
+	local rootPart = character.HumanoidRootPart
+	local closestEnemy = nil
+	local closestDistance = 20 -- Maximum auto-attack distance
+
+	-- Search for enemies
+	for _, descendant in pairs(workspace:GetDescendants()) do
+		if descendant:IsA("Model") and descendant:GetAttribute("ZoneID") then
+			-- This is likely an enemy model
+			local enemyPart = descendant.PrimaryPart or descendant:FindFirstChildWhichIsA("BasePart")
+			if enemyPart then
+				local distance = (rootPart.Position - enemyPart.Position).Magnitude
+				if distance < closestDistance then
+					closestEnemy = descendant
+					closestDistance = distance
+				end
+			end
+		end
+	end
+
+	-- Attack the closest enemy
+	if closestEnemy then
+		attackEnemy(closestEnemy)
+	end
+end)
+
+-- Initialize
+connectEnemyInteractions()
+print("Enemy interaction handler initialized")
